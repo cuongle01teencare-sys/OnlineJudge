@@ -30,8 +30,7 @@ const SYSTEM = `Bạn đọc đề thi lập trình (thường bằng tiếng Vi
 Với mỗi bài:
 - title: tên bài, bỏ số thứ tự "Bài 1", số điểm và tên file.
 - statement, inputFormat, outputFormat, constraints: giữ nguyên nội dung gốc, viết bằng Markdown; công thức viết dạng LaTeX $...$.
-  Hệ thống chấm chỉ dùng đầu vào/đầu ra chuẩn, không dùng file: nếu đề yêu cầu đọc từ file (BAI1.INP...) hoặc ghi ra file (BAI1.OUT...),
-  hãy viết lại thành đọc từ đầu vào chuẩn và in ra màn hình (đầu ra chuẩn), bỏ tên file và dòng "tên file chương trình".
+  Kể cả khi đề yêu cầu đọc/ghi file (BAI1.INP, BAI1.OUT...), vẫn chép đúng câu chữ của đề; giáo viên sẽ tự chọn cách sửa.
   Nếu đề không tách riêng phần nào thì để chuỗi rỗng, không tự bịa.
 - samples: các ví dụ vào/ra, giữ nguyên từng dòng và khoảng trắng; mỗi chuỗi kết thúc bằng một ký tự xuống dòng.
 - timeLimitMs / memoryLimitMb: theo đề (giây → ms). Nếu đề không ghi thì dùng 1000 và 256, và đặt timeLimitStated = false.

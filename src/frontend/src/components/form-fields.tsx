@@ -1,7 +1,7 @@
 'use client';
 
 import { Eye, Pencil, Upload, X } from 'lucide-react';
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Markdown } from './markdown';
 import { inputClass, monoTextareaClass } from './ui';
@@ -13,18 +13,27 @@ export function MarkdownField({
   onChange,
   rows = 8,
   placeholder,
+  labelExtra,
+  below,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   rows?: number;
   placeholder?: string;
+  /** Shown next to the label (e.g. a toggle). */
+  labelExtra?: ReactNode;
+  /** Shown under the field (e.g. why it cannot be saved). */
+  below?: ReactNode;
 }) {
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between">
-        <span className="text-sm font-medium text-slate-700">{label}</span>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <span className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-medium text-slate-700">{label}</span>
+          {labelExtra}
+        </span>
         <div className="flex gap-1 text-xs xl:hidden">
           <button
             type="button"
@@ -64,6 +73,7 @@ export function MarkdownField({
           )}
         </div>
       </div>
+      {below}
     </div>
   );
 }

@@ -1,10 +1,11 @@
 'use client';
 
-import { Difficulties, DifficultyLabels, type Difficulty, type UpsertProblemRequest } from '@oj/contracts';
+import { Difficulties, DifficultyLabels, fileIoFields, type Difficulty, type UpsertProblemRequest } from '@oj/contracts';
 import { Save } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { MarkdownField, TagsInput } from '../form-fields';
+import { TagsInput } from '../form-fields';
 import { Button, Card, Field, InlineAlert, inputClass } from '../ui';
+import { FileIoBlocker, ProblemTextField } from './problem-text-field';
 
 export const emptyProblem: UpsertProblemRequest = {
   title: '',
@@ -33,9 +34,12 @@ export function ProblemForm({
   const set = <K extends keyof UpsertProblemRequest>(k: K, val: UpsertProblemRequest[K]) =>
     setV((prev) => ({ ...prev, [k]: val }));
 
+  const blocked = fileIoFields(v).length > 0;
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (blocked) return;
     if (!v.title.trim()) return setError('Vui lòng nhập tên bài.');
     if (!(v.timeLimitMs > 0) || !(v.memoryLimitMb > 0)) return setError('Giới hạn thời gian/bộ nhớ phải lớn hơn 0.');
     setSaving(true);
@@ -99,18 +103,21 @@ export function ProblemForm({
       </Card>
 
       <Card className="space-y-5 p-5">
-        <MarkdownField label="Đề bài" value={v.statement} onChange={(s) => set('statement', s)} rows={12} />
-        <MarkdownField label="Dữ liệu vào (Input)" value={v.inputFormat} onChange={(s) => set('inputFormat', s)} rows={4} />
-        <MarkdownField label="Kết quả (Output)" value={v.outputFormat} onChange={(s) => set('outputFormat', s)} rows={4} />
-        <MarkdownField label="Ràng buộc" value={v.constraints} onChange={(s) => set('constraints', s)} rows={3} />
+        <ProblemTextField field="statement" value={v.statement} onChange={(s) => set('statement', s)} rows={12} />
+        <ProblemTextField field="inputFormat" value={v.inputFormat} onChange={(s) => set('inputFormat', s)} rows={4} />
+        <ProblemTextField field="outputFormat" value={v.outputFormat} onChange={(s) => set('outputFormat', s)} rows={4} />
+        <ProblemTextField field="constraints" value={v.constraints} onChange={(s) => set('constraints', s)} rows={3} />
       </Card>
 
       {error && <InlineAlert>{error}</InlineAlert>}
-      <div className="sticky bottom-0 z-10 -mx-4 flex justify-end border-t border-slate-200 bg-white/90 px-4 py-3 backdrop-blur">
-        <Button type="submit" loading={saving}>
-          <Save className="h-4 w-4" />
-          {submitLabel}
-        </Button>
+      <div className="sticky bottom-0 z-10 -mx-4 space-y-3 border-t border-slate-200 bg-white/90 px-4 py-3 backdrop-blur">
+        <FileIoBlocker problems={[{ content: v }]} />
+        <div className="flex justify-end">
+          <Button type="submit" loading={saving} disabled={blocked}>
+            <Save className="h-4 w-4" />
+            {submitLabel}
+          </Button>
+        </div>
       </div>
     </form>
   );

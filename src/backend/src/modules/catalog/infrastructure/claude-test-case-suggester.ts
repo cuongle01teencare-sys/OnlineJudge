@@ -1,9 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { Injectable, Logger } from '@nestjs/common';
-import type { TestCaseSuggestionsDto } from '@oj/contracts';
+import { isAboutFileIo, type TestCaseSuggestionsDto } from '@oj/contracts';
 import { z } from 'zod';
-import { isAboutFileIo } from '../../../shared/domain/standard-io.js';
 import { ClaudeClient } from '../../../shared/infrastructure/claude.js';
 import { TestCaseSuggester, type TestSuggestionContext } from '../application/ports.js';
 

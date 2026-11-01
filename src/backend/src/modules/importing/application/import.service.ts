@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { ImportProblemsResponse, ParsedExamDto, ProblemDraftDto } from '@oj/contracts';
+import { fileIoFields, fileIoMessage, isAboutFileIo, type ImportProblemsResponse, type ParsedExamDto, type ProblemDraftDto } from '@oj/contracts';
 import type { Actor } from '../../../shared/application/actor.js';
 import { assert } from '../../../shared/domain/domain-error.js';
-import { isAboutFileIo, toStandardIo } from '../../../shared/domain/standard-io.js';
 import { documentText, type ExamDocument } from '../domain/exam-document.js';
 import { ExamParser } from '../domain/exam-parser.js';
 import { DocumentReader, ProblemCatalogGateway, SmartExamReader, type UploadedFile } from './ports.js';
@@ -30,7 +29,7 @@ export class ImportService {
     if (this.smartReader.available) {
       try {
         const drafts = await this.smartReader.read(file, doc);
-        return { fileName: file.originalName, parser: 'AI', drafts: drafts.map(withStandardIo), rawText };
+        return { fileName: file.originalName, parser: 'AI', drafts: drafts.map(withoutFileHints), rawText };
       } catch (error) {
         this.logger.warn(`AI reader failed for ${file.originalName}, using the rule-based parser: ${(error as Error).message}`);
       }
@@ -38,12 +37,17 @@ export class ImportService {
 
     assert(doc && rawText.trim().length > 0, 'import.empty_document',
       'Không đọc được chữ trong tài liệu (có thể là PDF dạng ảnh scan). Đọc đề bằng AI sẽ xử lý được loại tệp này.');
-    return { fileName: file.originalName, parser: 'BASIC', drafts: this.parser.parse(doc).map(withStandardIo), rawText };
+    return { fileName: file.originalName, parser: 'BASIC', drafts: this.parser.parse(doc).map(withoutFileHints), rawText };
   }
 
   /** Step 2: create problems from the reviewed drafts; samples become sample test cases. */
   async confirm(actor: Actor, drafts: ProblemDraftDto[]): Promise<ImportProblemsResponse> {
     assert(drafts.length > 0 && drafts.length <= 50, 'import.invalid_count', 'Số bài nhập phải từ 1 đến 50.');
+    // Checked for every draft first, so a refused draft does not leave the ones before it half-imported.
+    drafts.forEach((draft, i) => {
+      const fields = fileIoFields(draft);
+      assert(!fields.length, 'import.file_io', `Bài ${i + 1} (${draft.title.trim() || 'chưa đặt tên'}): ${fileIoMessage(fields)}`);
+    });
     const problemIds: string[] = [];
     for (const draft of drafts) {
       problemIds.push(
@@ -68,14 +72,10 @@ export class ImportService {
   }
 }
 
-/** The judge uses standard input/output only: file wording is rewritten and hints about files dropped. */
-function withStandardIo(draft: ProblemDraftDto): ProblemDraftDto {
-  return {
-    ...draft,
-    statement: toStandardIo(draft.statement),
-    inputFormat: toStandardIo(draft.inputFormat),
-    outputFormat: toStandardIo(draft.outputFormat, 'output'),
-    constraints: toStandardIo(draft.constraints),
-    warnings: draft.warnings.filter((w) => !isAboutFileIo(w)),
-  };
+/**
+ * The judge uses standard input/output only. The teacher's wording is kept as read (the review screen offers
+ * the standard-I/O rewrite and refuses file wording); hints about files would only repeat that, so they go.
+ */
+function withoutFileHints(draft: ProblemDraftDto): ProblemDraftDto {
+  return { ...draft, warnings: draft.warnings.filter((w) => !isAboutFileIo(w)) };
 }

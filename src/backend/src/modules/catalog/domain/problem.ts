@@ -1,4 +1,4 @@
-import { Difficulties, Languages, type Difficulty, type Language } from '@oj/contracts';
+import { Difficulties, fileIoFields, fileIoMessage, Languages, type Difficulty, type Language } from '@oj/contracts';
 import { AggregateRoot, newId, type DomainEvent } from '../../../shared/domain/aggregate-root.js';
 import { assert, DomainError } from '../../../shared/domain/domain-error.js';
 import type { Actor } from '../../../shared/application/actor.js';
@@ -42,6 +42,9 @@ function validContent(content: ProblemContent): ProblemContent {
   assert(Difficulties.includes(content.difficulty), 'catalog.invalid_difficulty', 'Mức độ khó không hợp lệ.');
   const tags = [...new Set(content.tags.map((t) => t.trim().toLowerCase()).filter(Boolean))];
   assert(tags.length <= 20, 'catalog.too_many_tags', 'Tối đa 20 thẻ.');
+  // Programs are judged on standard input/output only.
+  const fileFields = fileIoFields(content);
+  assert(!fileFields.length, 'catalog.file_io', fileIoMessage(fileFields));
   return { ...content, title, tags };
 }
 

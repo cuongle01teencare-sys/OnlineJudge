@@ -3,6 +3,7 @@
 import {
   Difficulties,
   DifficultyLabels,
+  fileIoFields,
   type Difficulty,
   type ParsedExamDto,
   type ProblemDraftDto,
@@ -21,7 +22,8 @@ import {
 import Link from 'next/link';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Container } from '@/components/app-shell';
-import { IoTextarea, MarkdownField } from '@/components/form-fields';
+import { FileIoBlocker, ProblemTextField } from '@/components/admin/problem-text-field';
+import { IoTextarea } from '@/components/form-fields';
 import { RequireRole, STAFF } from '@/components/guards';
 import { useToast } from '@/components/toast';
 import { Badge, Button, Card, Field, InlineAlert, inputClass, LinkButton, PageHeader, Spinner } from '@/components/ui';
@@ -161,6 +163,17 @@ function DraftCard({
         </button>
       </div>
 
+      {d.include && fileIoFields(d).length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-mark-200 bg-mark-50 px-4 py-2 text-sm text-mark-700">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          Đề còn yêu cầu đọc/ghi file nên chưa nhập được.
+          {!d.open && (
+            <button type="button" className="font-medium underline" onClick={() => update({ open: true })}>
+              Mở để sửa hoặc dùng gợi ý
+            </button>
+          )}
+        </div>
+      )}
       {d.warnings.length > 0 && (
         <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
           {d.warnings.map((w, i) => (
@@ -199,10 +212,10 @@ function DraftCard({
               />
             </Field>
           </div>
-          <MarkdownField label="Đề bài" value={d.statement} onChange={(statement) => update({ statement })} rows={10} />
-          <MarkdownField label="Dữ liệu vào" value={d.inputFormat} onChange={(inputFormat) => update({ inputFormat })} rows={3} />
-          <MarkdownField label="Kết quả" value={d.outputFormat} onChange={(outputFormat) => update({ outputFormat })} rows={3} />
-          <MarkdownField label="Ràng buộc" value={d.constraints} onChange={(constraints) => update({ constraints })} rows={3} />
+          <ProblemTextField field="statement" value={d.statement} onChange={(statement) => update({ statement })} rows={10} />
+          <ProblemTextField field="inputFormat" value={d.inputFormat} onChange={(inputFormat) => update({ inputFormat })} rows={3} />
+          <ProblemTextField field="outputFormat" value={d.outputFormat} onChange={(outputFormat) => update({ outputFormat })} rows={3} />
+          <ProblemTextField field="constraints" value={d.constraints} onChange={(constraints) => update({ constraints })} rows={3} />
 
           <div>
             <div className="mb-2 flex items-center justify-between">
@@ -288,10 +301,12 @@ export default function ImportPage() {
   };
 
   const included = drafts.filter((d) => d.include);
+  const blocked = included.some((d) => fileIoFields(d).length > 0);
 
   const confirm = async () => {
     const bad = included.find((d) => !d.title.trim());
     if (bad) return toast.error('Có bài chưa có tên. Điền tên cho các bài đã chọn rồi nhập lại.');
+    if (blocked) return;
     setImporting(true);
     try {
       const payload: ProblemDraftDto[] = included.map(({ include: _i, open: _o, ...d }) => ({
@@ -422,11 +437,18 @@ export default function ImportPage() {
               )}
             </Card>
 
-            <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-end gap-3 border-t border-slate-200 bg-white/90 px-4 py-3 backdrop-blur">
-              <span className="text-sm text-slate-500">{included.length} bài sẽ được thêm vào ngân hàng của bạn</span>
-              <Button onClick={confirm} loading={importing} disabled={included.length === 0}>
-                Nhập {included.length} bài
-              </Button>
+            <div className="sticky bottom-0 z-10 -mx-4 space-y-3 border-t border-slate-200 bg-white/90 px-4 py-3 backdrop-blur">
+              <FileIoBlocker
+                problems={drafts
+                  .map((d, i) => ({ label: `Bài ${i + 1} (${d.title.trim() || 'chưa đặt tên'})`, content: d, include: d.include }))
+                  .filter((p) => p.include)}
+              />
+              <div className="flex items-center justify-end gap-3">
+                <span className="text-sm text-slate-500">{included.length} bài sẽ được thêm vào ngân hàng của bạn</span>
+                <Button onClick={confirm} loading={importing} disabled={included.length === 0 || blocked}>
+                  Nhập {included.length} bài
+                </Button>
+              </div>
             </div>
           </div>
         )}

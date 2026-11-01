@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isAboutFileIo, toStandardIo } from '../src/shared/domain/standard-io.js';
+import { fileIoFields, hasFileIo, isAboutFileIo, toStandardIo } from '@oj/contracts';
 
 test('file-based input/output wording becomes standard input/output', () => {
   assert.equal(toStandardIo('Dữ liệu vào từ file BAI1.INP gồm hai số a, b.'), 'Dữ liệu vào từ đầu vào chuẩn gồm hai số a, b.');
@@ -19,6 +19,7 @@ test('every way of giving the input in a file becomes standard input', () => {
     ['Tệp dữ liệu vào: SUM.INP', 'Dữ liệu vào:'],
     ['Tệp vào BAI1.INP gồm:', 'Dữ liệu vào gồm:'],
     ['Tệp input gồm n dòng.', 'Dữ liệu vào gồm n dòng.'],
+    ['File BAUOC.INP gồm một dòng ghi số nguyên dương N.', 'Dữ liệu vào gồm một dòng ghi số nguyên dương N.'],
     ['Input file: input.txt', 'Input:'],
     ['Dòng đầu tiên của tệp chứa số n.', 'Dòng đầu tiên của dữ liệu vào chứa số n.'],
     ['Dữ liệu nằm trong tệp BAI2.INP.', 'Dữ liệu được cho từ đầu vào chuẩn.'],
@@ -56,27 +57,45 @@ test('hints about reading or writing files are recognised', () => {
   ]) assert.ok(!isAboutFileIo(note), note);
 });
 
-test('imported exams come out with standard input/output', async () => {
+test('the teacher wording is kept on import; file wording is refused until it is fixed', async () => {
   const { ImportService } = await import('../src/modules/importing/application/import.service.js');
   const p = (text: string) => ({ kind: 'paragraph' as const, text });
   const doc = { fileName: 'de.docx', blocks: [
     p('Bài 1. TỔNG HAI SỐ'),
-    p('Tên file chương trình: TONG.CPP'),
     p('Cho hai số nguyên a và b.'),
     p('Dữ liệu vào: Đọc từ file TONG.INP một dòng chứa a, b.'),
     p('Kết quả: Ghi ra file TONG.OUT tổng a + b.'),
     p('Ví dụ:'),
     { kind: 'table' as const, rows: [['TONG.INP', 'TONG.OUT'], ['1 2', '3']] },
   ] };
+  const created: string[] = [];
   const service = new ImportService(
     { read: async () => doc } as never,
     { available: false } as never,
-    {} as never,
+    { createProblem: async (_: unknown, problem: { title: string }) => (created.push(problem.title), 'id') } as never,
   );
   const [draft] = (await service.parse({ originalName: 'de.docx', mimeType: '', buffer: Buffer.alloc(0) })).drafts;
-  assert.equal(draft.inputFormat, 'Đọc từ đầu vào chuẩn một dòng chứa a, b.');
-  assert.equal(draft.outputFormat, 'Ghi ra màn hình (đầu ra chuẩn) tổng a + b.');
-  assert.doesNotMatch(draft.statement, /TONG\.CPP|file/i);
+  assert.equal(draft.inputFormat, 'Đọc từ file TONG.INP một dòng chứa a, b.');
+  assert.equal(draft.outputFormat, 'Ghi ra file TONG.OUT tổng a + b.');
   assert.deepEqual(draft.samples, [{ input: '1 2\n', expectedOutput: '3\n' }]);
   assert.ok(draft.warnings.every((w) => !isAboutFileIo(w)));
+
+  const fine = { ...draft, title: 'Bài ổn', inputFormat: 'Một dòng chứa a, b.', outputFormat: 'In ra a + b.' };
+  await assert.rejects(service.confirm({ id: 't', role: 'TEACHER', name: 'Lan' }, [fine, draft]),
+    /Bài 2 \(TỔNG HAI SỐ\): Phần Dữ liệu vào, Kết quả còn yêu cầu đọc\/ghi file/);
+  assert.deepEqual(created, [], 'nothing is imported when one draft is refused');
+
+  const fixed = { ...draft, inputFormat: toStandardIo(draft.inputFormat), outputFormat: toStandardIo(draft.outputFormat, 'output') };
+  assert.deepEqual(fileIoFields(fixed), []);
+  await service.confirm({ id: 't', role: 'TEACHER', name: 'Lan' }, [fixed]);
+  assert.deepEqual(created, ['TỔNG HAI SỐ']);
+});
+
+test('a problem asking for files cannot be saved', async () => {
+  const { Problem, ResourceLimits } = await import('../src/modules/catalog/domain/problem.js');
+  const content = { title: 'A', difficulty: 'EASY' as const, tags: [], statement: 'Cho a.', inputFormat: 'Một số a.', outputFormat: 'In ra a.', constraints: '' };
+  const problem = Problem.create(1, { id: 't', name: 'Lan' }, content, ResourceLimits.default);
+  assert.throws(() => problem.update({ ...content, outputFormat: 'Ghi ra tệp A.OUT số a.' }, ResourceLimits.default), /Phần Kết quả còn yêu cầu đọc\/ghi file/);
+  assert.ok(hasFileIo('Dữ liệu vào (BAI1.INP): n'));
+  assert.ok(!hasFileIo('Nhập từ bàn phím số n. In ra màn hình kết quả.'));
 });

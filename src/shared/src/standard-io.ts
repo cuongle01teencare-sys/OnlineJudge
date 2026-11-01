@@ -1,7 +1,8 @@
 /**
  * The judge feeds tests on standard input and compares standard output; programs never open files.
  * Exams written for file-based contests ("Dữ liệu vào từ file BAI1.INP", "Ghi kết quả ra file BAI1.OUT")
- * are rewritten to standard I/O, and hints about files are dropped.
+ * are not accepted as they are: the editor either fixes the wording or takes the suggested rewrite
+ * (`toStandardIo`). Shared by the API (which refuses such problems) and the web app (which suggests the fix).
  */
 
 /** Which section the text comes from: decides what a bare "the file" refers to. */
@@ -52,6 +53,8 @@ function rules(side: IoSide): [RegExp, string | ((match: string) => string)][] {
         : `được cho từ ${STDIN}`)],
     // "Dòng đầu tiên của tệp chứa n" -> "của dữ liệu vào" (or "của kết quả" in the output section)
     [re(`${B}(của|trên)\\s+${FILE}${E}(?:${NAME})?`), (m) => `${m.trim().split(/\s+/)[0]} ${theData}`],
+    // A sentence that starts with the file: "File BAUOC.INP gồm một dòng" -> "Dữ liệu vào gồm một dòng"
+    [re(`(?<=^|[.!?]\\s+)${FILE}${NAME}`, 'gimu'), (m) => keepCase(m, isOutputName(m) || side === 'output' ? 'kết quả' : 'dữ liệu vào')],
     // Anything left: "file BAI1.INP", "tệp SUM.OUT"
     [re(`${B}${FILE}${NAME}`), ''],
     // Bare file names: "Dữ liệu vào (BAI1.INP):", "Input: input.txt"
@@ -87,4 +90,31 @@ const FILE_HINT = new RegExp(
 /** True for a hint about reading or writing files, which does not apply to this judge. */
 export function isAboutFileIo(note: string): boolean {
   return FILE_HINT.test(note);
+}
+
+/** True when the text still asks to read or write a file. */
+export function hasFileIo(text: string, side: IoSide = 'input'): boolean {
+  return rules(side).some(([pattern]) => new RegExp(pattern.source, pattern.flags.replace('g', '')).test(text));
+}
+
+export const ProblemTextFields = ['statement', 'inputFormat', 'outputFormat', 'constraints'] as const;
+export type ProblemTextField = (typeof ProblemTextFields)[number];
+export const ProblemTextFieldLabels: Record<ProblemTextField, string> = {
+  statement: 'Đề bài',
+  inputFormat: 'Dữ liệu vào',
+  outputFormat: 'Kết quả',
+  constraints: 'Ràng buộc',
+};
+export const ioSideOf = (field: ProblemTextField): IoSide => (field === 'outputFormat' ? 'output' : 'input');
+
+/** Sections of a problem that still read or write files. */
+export function fileIoFields(content: Record<ProblemTextField, string>): ProblemTextField[] {
+  return ProblemTextFields.filter((field) => hasFileIo(content[field], ioSideOf(field)));
+}
+
+/** Why a problem with file input/output cannot be saved. */
+export function fileIoMessage(fields: ProblemTextField[]): string {
+  return `Phần ${fields.map((f) => ProblemTextFieldLabels[f]).join(', ')} còn yêu cầu đọc/ghi file. `
+    + 'Hệ thống chấm chỉ đưa dữ liệu qua đầu vào chuẩn (bàn phím) và chấm theo đầu ra chuẩn (màn hình): '
+    + 'hãy sửa lại, hoặc bật "Dùng gợi ý" cạnh mục đó.';
 }

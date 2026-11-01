@@ -114,7 +114,7 @@ Staff only (students reach problems through sessions).
 | Method | Path | Who | Body | Response |
 |---|---|---|---|---|
 | POST | /imports/parse | staff | multipart/form-data, field `file` (.docx or .pdf, ≤ 10MB) | ParsedExamDto |
-| POST | /imports/confirm | staff | ImportProblemsRequest | ImportProblemsResponse (problems owned by the caller) |
+| POST | /imports/confirm | staff | ImportProblemsRequest | ImportProblemsResponse (problems owned by the caller). 400 `import.file_io` (nothing imported) when a draft still reads or writes files |
 
 ## Problem set bank
 | Method | Path | Who | Body | Response |
@@ -208,3 +208,10 @@ Flags are never shown to students and never change scores.
 | POST | /threads/:id/pin | manager | PinThreadRequest | ThreadDto |
 
 Archived classes are read-only (no new threads or replies); threads are deleted with the class.
+
+### Standard input/output only
+Programs are judged on standard input and standard output. Creating or updating a problem (and confirming an import)
+is refused with 400 `catalog.file_io` / `import.file_io` when the statement, input, output or constraints still ask to
+read or write files ("Đọc từ file BAI1.INP", "Ghi ra tệp BAI1.OUT", "Tên file chương trình"). `@oj/contracts` exports
+the same check (`fileIoFields`, `hasFileIo`) and the suggested rewrite (`toStandardIo`), which the web app offers as a
+"Dùng gợi ý" switch next to each section. Imports keep the document's wording; only AI hints about files are dropped.
