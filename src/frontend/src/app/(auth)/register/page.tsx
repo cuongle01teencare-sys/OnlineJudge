@@ -43,7 +43,7 @@ export default function RegisterPage() {
         email: email.trim(),
         phone: phoneClean || null,
         password,
-        classCode: classCode.trim(),
+        classCode: classCode.trim() || null,
       });
       setTicket(t);
       setCode('');
@@ -176,15 +176,18 @@ export default function RegisterPage() {
             />
           </Field>
         </div>
-        <Field label="Mã lớp" hint="Mã lớp do giáo viên cung cấp, ví dụ 22DTHC5.">
+        <Field
+          label="Mã lớp (không bắt buộc)"
+          hint="Có mã lớp thì nhập vào: tài khoản sẽ gửi yêu cầu vào lớp, giáo viên duyệt xong bạn mới vào lớp. Không có mã vẫn đăng ký được và luyện tập bài công khai."
+        >
           <input
-            required
             autoComplete="off"
             autoCapitalize="characters"
             spellCheck={false}
             className={`${inputClass} font-mono tracking-widest uppercase`}
             value={classCode}
             onChange={(e) => setClassCode(e.target.value)}
+            placeholder="22DTHC5"
           />
         </Field>
         {error && <InlineAlert>{error}</InlineAlert>}

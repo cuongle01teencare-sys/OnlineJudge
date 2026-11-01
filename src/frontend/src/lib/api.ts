@@ -1,5 +1,6 @@
 import type {
   AcceptInvitationRequest,
+  AddStudentRequest,
   AnswerKeyDto,
   ApiErrorBody,
   AuthResponse,
@@ -20,8 +21,11 @@ import type {
   InvitationDto,
   InvitationPreviewDto,
   InviteTeacherRequest,
+  JoinClassRequest,
+  LeaveClassRequest,
   LearningRecordDto,
   LoginRequest,
+  MembershipRequestDto,
   Paginated,
   ParsedExamDto,
   ProblemDetailDto,
@@ -126,7 +130,7 @@ async function request<T>(
   try {
     res = await fetch(buildUrl(path, opts.query), { method, headers, body });
   } catch {
-    throw new ApiError('Không kết nối được máy chủ chấm bài. Kiểm tra mạng rồi thử lại; nếu vẫn lỗi, báo giáo viên.', 0);
+    throw new ApiError('Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại; nếu vẫn lỗi, báo giáo viên.', 0);
   }
 
   if (res.status === 204) return undefined as T;
@@ -213,8 +217,28 @@ export const api = {
     request<void>('POST', `/classes/${id}/delete-now`, { body }),
   listClassStudents: (id: string) => request<ClassStudentDto[]>('GET', `/classes/${id}/students`),
   listUnassignedStudents: () => request<ClassStudentDto[]>('GET', '/classes/unassigned-students'),
+  /** Admin: adds the student to `classId`; other classes the student is in are kept. */
   moveStudent: (studentId: string, classId: string) =>
     request<ClassStudentDto>('PUT', `/classes/students/${studentId}`, { body: { classId } }),
+  addStudent: (classId: string, body: AddStudentRequest) =>
+    request<ClassStudentDto>('POST', `/classes/${classId}/students`, { body }),
+  removeStudent: (classId: string, studentId: string) =>
+    request<void>('DELETE', `/classes/${classId}/students/${studentId}`),
+
+  // Join / leave requests (student asks, class teacher or admin decides)
+  joinClass: (body: JoinClassRequest) => request<MembershipRequestDto>('POST', '/classes/join', { body }),
+  leaveClass: (classId: string, body: LeaveClassRequest = {}) =>
+    request<MembershipRequestDto>('POST', `/classes/${classId}/leave`, { body }),
+  myMembershipRequests: () => request<MembershipRequestDto[]>('GET', '/membership-requests/mine'),
+  cancelMembershipRequest: (id: string) =>
+    request<MembershipRequestDto>('POST', `/membership-requests/${id}/cancel`),
+  listClassRequests: (classId: string) => request<MembershipRequestDto[]>('GET', `/classes/${classId}/requests`),
+  approveMembershipRequest: (id: string) =>
+    request<MembershipRequestDto>('POST', `/membership-requests/${id}/approve`),
+  rejectMembershipRequest: (id: string) =>
+    request<MembershipRequestDto>('POST', `/membership-requests/${id}/reject`),
+  approveAllJoinRequests: (classId: string) =>
+    request<{ approved: number }>('POST', `/classes/${classId}/requests/approve-all`),
 
   // Problem bank
   listProblems: (q: ProblemQuery = {}) =>

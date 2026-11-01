@@ -34,7 +34,8 @@ export interface RegisterRequest {
   password: string;
   displayName: string;
   phone: string | null;
-  classCode: string;
+  /** Optional: with a class code the new account also asks to join that class (the teacher approves). */
+  classCode?: string | null;
 }
 
 /** Handle for a pending email verification (sign-up or password reset). */
@@ -99,7 +100,8 @@ export interface AcceptInvitationRequest {
 export type ClassStatus = 'ACTIVE' | 'ARCHIVED';
 
 /**
- * A class: one teacher, many students, sessions of its own. Students join with `code`.
+ * A class: one teacher, many students, sessions of its own. A student may belong to several classes.
+ * Students ask to join with `code` (or to leave) and the teacher approves; teachers add/remove students directly.
  * ARCHIVED = course finished: read-only, no new students or submissions; can be restored
  * until it is deleted for good (`purgeAt`).
  */
@@ -117,8 +119,10 @@ export interface ClassroomDto {
   /** When an archived class will be deleted for good; null = not scheduled. */
   purgeAt: string | null;
   createdAt: string;
-  /** Student view only: false once the student moved to another class (kept as history). */
+  /** Student view only: false once the student left the class (kept as history). */
   isCurrent?: boolean;
+  /** Teacher/admin view only: join and leave requests waiting for a decision. */
+  pendingRequestCount?: number;
 }
 
 export interface UpsertClassroomRequest {
@@ -148,8 +152,45 @@ export interface ClassStudentDto {
   enrolledAt: string | null;
 }
 
+/** Admin: put a student (e.g. from the "no class" list) into a class. Other classes are not affected. */
 export interface MoveStudentRequest {
   classId: string;
+}
+
+/** Teacher/admin: add a registered student to the class by email, no request needed. */
+export interface AddStudentRequest {
+  email: string;
+}
+
+export const MembershipRequestKinds = ['JOIN', 'LEAVE'] as const;
+export type MembershipRequestKind = (typeof MembershipRequestKinds)[number];
+export type MembershipRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+
+/** A student's request to join or leave a class; the class teacher (or admin) decides. */
+export interface MembershipRequestDto {
+  id: string;
+  kind: MembershipRequestKind;
+  status: MembershipRequestStatus;
+  classId: string;
+  className: string;
+  teacherName: string;
+  studentId: string;
+  studentName: string;
+  studentEmail: string;
+  /** Optional note from the student, e.g. why they want to leave. */
+  message: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+  decidedByName: string | null;
+}
+
+export interface JoinClassRequest {
+  classCode: string;
+  message?: string | null;
+}
+
+export interface LeaveClassRequest {
+  message?: string | null;
 }
 
 // ---------- Catalog (each teacher's problem bank = blueprints) ----------

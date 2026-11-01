@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { Container } from '@/components/app-shell';
 import { ClassCode, ClassCodeInput, MoveStudentControl, TeacherSelect } from '@/components/classes';
+import { AddStudentForm, ClassRequestsPanel, RemoveStudentButton } from '@/components/membership';
 import { RequireRole, STAFF } from '@/components/guards';
 import { AssignFromBankDialog, SessionList } from '@/components/sessions';
 import { ClassBoard } from '@/components/threads';
@@ -76,7 +77,7 @@ function ClassHeader({ cls, onSaved }: { cls: ClassroomDto; onSaved: (c: Classro
             <Field label="Tên lớp">
               <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
             </Field>
-            <Field label="Mã lớp" hint="Đổi mã thì mã cũ không dùng được để đăng ký nữa.">
+            <Field label="Mã lớp" hint="Đổi mã thì mã cũ không dùng được để xin vào lớp nữa.">
               <ClassCodeInput value={code} onChange={setCode} name={name} />
             </Field>
             {isAdmin && (
@@ -102,7 +103,7 @@ function ClassHeader({ cls, onSaved }: { cls: ClassroomDto; onSaved: (c: Classro
   return (
     <Card className="mb-6 flex flex-wrap items-center gap-x-8 gap-y-4 p-5">
       <div>
-        <div className="mb-1 text-sm text-slate-500">Mã lớp để học sinh đăng ký</div>
+        <div className="mb-1 text-sm text-slate-500">Mã lớp để học sinh xin vào lớp</div>
         {cls.code ? <ClassCode code={cls.code} size="lg" /> : <span className="text-slate-400">—</span>}
       </div>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
@@ -123,8 +124,18 @@ function ClassHeader({ cls, onSaved }: { cls: ClassroomDto; onSaved: (c: Classro
   );
 }
 
-function Roster({ cls, onCountChange }: { cls: ClassroomDto; onCountChange: (delta: number) => void }) {
-  const { data, error, loading, reload, setData } = useAsync(() => api.listClassStudents(cls.id), [cls.id]);
+function Roster({
+  cls,
+  refreshKey,
+  onCountChange,
+}: {
+  cls: ClassroomDto;
+  /** Bumped when a request is approved elsewhere on the page, so the list reloads. */
+  refreshKey: number;
+  onCountChange: (delta: number) => void;
+}) {
+  const { data, error, loading, reload, setData } = useAsync(() => api.listClassStudents(cls.id), [cls.id, refreshKey]);
+  const archived = cls.status === 'ARCHIVED';
   const classes = useAsync(() => api.listClasses(), []);
   const students = [...(data ?? [])].sort((a, b) => a.displayName.localeCompare(b.displayName, 'vi'));
 
@@ -134,6 +145,19 @@ function Roster({ cls, onCountChange }: { cls: ClassroomDto; onCountChange: (del
         <h2 className="font-semibold">Học sinh trong lớp</h2>
         {data && <span className="text-sm text-slate-500">{data.length} học sinh</span>}
       </div>
+      {archived ? (
+        <p className="border-b border-slate-100 px-5 py-2 text-xs text-slate-500">
+          Lớp đã lưu trữ nên không thêm hay mời học sinh ra khỏi lớp được. Khôi phục lớp để thay đổi danh sách.
+        </p>
+      ) : (
+        <AddStudentForm
+          classId={cls.id}
+          onAdded={(st) => {
+            setData((prev) => [...(prev ?? []).filter((x) => x.userId !== st.userId), st]);
+            onCountChange(1);
+          }}
+        />
+      )}
       {loading && !data ? (
         <LoadingState />
       ) : error ? (
@@ -144,7 +168,7 @@ function Roster({ cls, onCountChange }: { cls: ClassroomDto; onCountChange: (del
         <EmptyState title="Lớp chưa có học sinh">
           {cls.status === 'ACTIVE' ? (
             <>
-              Đưa mã lớp <b>{cls.code}</b> cho học sinh. Các em nhập mã này khi đăng ký tài khoản.
+              Đưa mã lớp <b>{cls.code}</b> cho học sinh để các em xin vào lớp, hoặc thêm học sinh bằng email ở trên.
             </>
           ) : (
             'Lớp đã lưu trữ nên không nhận học sinh mới.'
@@ -156,8 +180,8 @@ function Roster({ cls, onCountChange }: { cls: ClassroomDto; onCountChange: (del
             <thead className="border-b border-rule bg-slate-50 text-left text-xs font-medium text-slate-500">
               <tr>
                 <th className="px-4 py-2.5">Họ tên</th>
-                <th className="px-4 py-2.5">Email</th>
-                <th className="px-4 py-2.5">Số điện thoại</th>
+                <th className="hidden px-4 py-2.5 sm:table-cell">Email</th>
+                <th className="hidden px-4 py-2.5 sm:table-cell">Số điện thoại</th>
                 <th className="hidden px-4 py-2.5 md:table-cell">Vào lớp</th>
                 <th className="px-4 py-2.5" />
               </tr>
@@ -165,9 +189,18 @@ function Roster({ cls, onCountChange }: { cls: ClassroomDto; onCountChange: (del
             <tbody className="divide-y divide-slate-100">
               {students.map((s) => (
                 <tr key={s.userId} className="hover:bg-slate-50">
-                  <td className="px-4 py-2.5 font-medium text-slate-800">{s.displayName}</td>
-                  <td className="px-4 py-2.5 text-slate-600">{s.email}</td>
-                  <td className="px-4 py-2.5 whitespace-nowrap text-slate-600 tabular-nums">
+                  <td className="px-4 py-2.5">
+                    <div className="font-medium text-slate-800">{s.displayName}</div>
+                    {/* Phones: email and phone sit under the name instead of in their own columns. */}
+                    <div className="text-xs break-all text-slate-500 sm:hidden">{s.email}</div>
+                    {s.phone && (
+                      <a href={`tel:${s.phone}`} className="text-xs text-slate-500 tabular-nums sm:hidden">
+                        {s.phone}
+                      </a>
+                    )}
+                  </td>
+                  <td className="hidden px-4 py-2.5 text-slate-600 sm:table-cell">{s.email}</td>
+                  <td className="hidden px-4 py-2.5 whitespace-nowrap text-slate-600 tabular-nums sm:table-cell">
                     {s.phone ? (
                       <a href={`tel:${s.phone}`} className="hover:text-ink-700">
                         {s.phone}
@@ -178,16 +211,23 @@ function Roster({ cls, onCountChange }: { cls: ClassroomDto; onCountChange: (del
                   </td>
                   <td className="hidden px-4 py-2.5 text-slate-500 md:table-cell">{formatDate(s.enrolledAt)}</td>
                   <td className="px-4 py-2.5 text-right">
-                    {cls.status === 'ACTIVE' && (
-                      <MoveStudentControl
-                        studentId={s.userId}
-                        currentClassId={cls.id}
-                        classes={(classes.data ?? []).filter((c) => c.status === 'ACTIVE')}
-                        onMoved={() => {
-                          setData((prev) => (prev ?? []).filter((x) => x.userId !== s.userId));
-                          onCountChange(-1);
-                        }}
-                      />
+                    {!archived && (
+                      <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                        <MoveStudentControl
+                          studentId={s.userId}
+                          excludeClassId={cls.id}
+                          classes={(classes.data ?? []).filter((c) => c.status === 'ACTIVE')}
+                          onMoved={() => undefined}
+                        />
+                        <RemoveStudentButton
+                          cls={cls}
+                          student={s}
+                          onRemoved={() => {
+                            setData((prev) => (prev ?? []).filter((x) => x.userId !== s.userId));
+                            onCountChange(-1);
+                          }}
+                        />
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -277,7 +317,7 @@ function LifecycleBar({ cls, onChange }: { cls: ClassroomDto; onChange: (c: Clas
       <div className="mb-6 flex flex-wrap items-center gap-3 rounded-panel border border-rule bg-white px-5 py-3">
         <Badge className="bg-chalk-50 text-chalk-700 ring-1 ring-chalk-200">Đang học</Badge>
         <span className="flex-1 text-sm text-slate-600">
-          Học sinh đăng ký được bằng mã lớp và nộp bài trong các phiên đang mở.
+          Học sinh xin vào lớp bằng mã lớp và nộp bài trong các phiên đang mở.
         </span>
         <Button variant="secondary" size="sm" onClick={() => setConfirmArchive(true)}>
           <Archive className="h-4 w-4" />
@@ -292,6 +332,7 @@ function LifecycleBar({ cls, onChange }: { cls: ClassroomDto; onChange: (c: Clas
           message={
             <ul className="list-disc space-y-1 pl-5">
               <li>Lớp chỉ còn để xem: không nhận học sinh mới, không nộp bài, không giao bài mới.</li>
+              <li>Yêu cầu vào lớp và rời lớp đang chờ sẽ được giữ, duyệt được sau khi khôi phục.</li>
               <li>Học sinh vẫn mở được các phiên cũ và học bạ vẫn giữ nguyên.</li>
               <li>Bạn có thể khôi phục lớp bất cứ lúc nào, hoặc hẹn xóa hẳn.</li>
             </ul>
@@ -419,6 +460,7 @@ function LifecycleBar({ cls, onChange }: { cls: ClassroomDto; onChange: (c: Clas
 export default function ClassDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: cls, error, loading, reload, setData } = useAsync(() => api.getClass(id), [id]);
+  const [rosterKey, setRosterKey] = useState(0);
 
   return (
     <RequireRole roles={STAFF}>
@@ -432,10 +474,19 @@ export default function ClassDetailPage() {
             <PageHeader back={{ href: '/classes', label: 'Lớp' }} title={cls.name} />
             <LifecycleBar cls={cls} onChange={(c) => setData(c)} />
             <ClassHeader key={cls.id + cls.code + cls.teacherId + cls.status} cls={cls} onSaved={(c) => setData(c)} />
+            <ClassRequestsPanel
+              key={cls.id + cls.status}
+              cls={cls}
+              onDecided={() => {
+                reload();
+                setRosterKey((k) => k + 1);
+              }}
+            />
             <ClassSessions cls={cls} />
             <ClassBoard classId={cls.id} archived={cls.status === 'ARCHIVED'} isManager />
             <Roster
               cls={cls}
+              refreshKey={rosterKey}
               onCountChange={(d) => setData((prev) => (prev ? { ...prev, studentCount: prev.studentCount + d } : prev!))}
             />
           </>

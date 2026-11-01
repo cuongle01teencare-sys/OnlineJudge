@@ -17,7 +17,11 @@ export class IdentityPeopleDirectory extends PeopleDirectory {
     return this.identity.listByRole(role);
   }
 
-  startStudentRegistration(input: Omit<RegisterRequest, 'classCode'>, classId: string) {
+  findByEmail(email: string) {
+    return this.identity.findByEmail(email);
+  }
+
+  startStudentRegistration(input: Omit<RegisterRequest, 'classCode'>, classId: string | null) {
     return this.identity.requestStudentRegistration(input, classId);
   }
 }

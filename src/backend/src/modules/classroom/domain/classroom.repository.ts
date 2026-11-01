@@ -1,4 +1,6 @@
+import type { MembershipRequestKind } from '@oj/contracts';
 import type { ClassCode, Classroom, Enrollment } from './classroom.js';
+import type { MembershipRequest } from './membership-request.js';
 
 export abstract class ClassroomRepository {
   abstract findById(id: string): Promise<Classroom | null>;
@@ -21,6 +23,20 @@ export abstract class EnrollmentRepository {
   /** classId -> number of open memberships */
   abstract countOpenByClass(classIds: string[]): Promise<Map<string, number>>;
   abstract save(enrollment: Enrollment): Promise<void>;
+  abstract deleteByStudent(studentId: string): Promise<void>;
+  abstract deleteByClass(classId: string): Promise<void>;
+}
+
+export abstract class MembershipRequestRepository {
+  abstract findById(id: string): Promise<MembershipRequest | null>;
+  /** The open request of this kind, if any (at most one per student, class and kind). */
+  abstract findPending(studentId: string, classId: string, kind: MembershipRequestKind): Promise<MembershipRequest | null>;
+  abstract findPendingByClass(classId: string): Promise<MembershipRequest[]>;
+  /** A student's requests, newest first (recent history included). */
+  abstract findByStudent(studentId: string, limit: number): Promise<MembershipRequest[]>;
+  /** classId -> number of pending requests */
+  abstract countPendingByClass(classIds: string[]): Promise<Map<string, number>>;
+  abstract save(request: MembershipRequest): Promise<void>;
   abstract deleteByStudent(studentId: string): Promise<void>;
   abstract deleteByClass(classId: string): Promise<void>;
 }

@@ -6,6 +6,7 @@ import {
   Dumbbell,
   FilePlus2,
   FileUp,
+  Hourglass,
   Library,
   NotebookPen,
   PlayCircle,
@@ -18,12 +19,13 @@ import {
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Container } from '@/components/app-shell';
-import { ClassCode } from '@/components/classes';
+import { ClassCode, PendingRequestsBadge } from '@/components/classes';
 import { ProgressCells, SessionList } from '@/components/sessions';
 import { ThreadList } from '@/components/threads';
 import { Card, InlineAlert, LoadingState } from '@/components/ui';
 import { api } from '@/lib/api';
 import { RoleLabels, useAuth } from '@/lib/auth';
+import { splitStudentClasses } from '@/lib/classes';
 import { isClosingSoon, solveHref, sortSessions } from '@/lib/sessions';
 import { useAsync } from '@/lib/use-async';
 import { LAST_PROBLEM_KEY, storageGet, type LastProblem } from '@/lib/utils';
@@ -81,7 +83,7 @@ function MyClasses({ classes, isAdmin }: { classes: ClassroomDto[] | undefined; 
         <LoadingState />
       ) : list.length === 0 ? (
         <div className="px-5 py-5 text-sm text-slate-600">
-          <p>Chưa có lớp nào. Tạo lớp để có mã cho học sinh đăng ký và để giao bài.</p>
+          <p>Chưa có lớp nào. Tạo lớp để có mã cho học sinh xin vào lớp và để giao bài.</p>
           <Link
             href="/classes"
             className="mt-3 inline-flex h-9 items-center gap-2 rounded-control bg-ink-600 px-4 font-medium text-white hover:bg-ink-700"
@@ -100,6 +102,7 @@ function MyClasses({ classes, isAdmin }: { classes: ClassroomDto[] | undefined; 
                   <div className="text-xs text-slate-500">
                     {c.studentCount} học sinh{isAdmin ? `, GV ${c.teacherName}` : ''}
                   </div>
+                  <PendingRequestsBadge count={c.pendingRequestCount} className="mt-1" />
                 </div>
                 {c.code && <ClassCode code={c.code} size="sm" />}
               </Link>
@@ -120,7 +123,7 @@ function StaffHome() {
 
   const actions: QuickAction[] = [];
   if (hasNoClass && !isAdmin) {
-    actions.push({ href: '/classes', title: 'Tạo lớp đầu tiên', desc: 'Cần có lớp để học sinh đăng ký và để giao bài', icon: School });
+    actions.push({ href: '/classes', title: 'Tạo lớp đầu tiên', desc: 'Cần có lớp để học sinh xin vào lớp và để giao bài', icon: School });
   } else {
     actions.push({ href: '/bank/sets', title: 'Giao bài', desc: 'Chọn một đề trong ngân hàng rồi bấm “Giao bài”', icon: Send });
   }
@@ -199,7 +202,9 @@ function StudentHome() {
     }
   }, []);
 
-  const current = (classes.data ?? []).find((c) => c.isCurrent !== false && c.status === 'ACTIVE');
+  const requests = useAsync(() => api.myMembershipRequests(), []);
+  const current = splitStudentClasses(classes.data ?? []).current;
+  const pending = (requests.data ?? []).filter((r) => r.status === 'PENDING');
   const open = sortSessions((sessions.data ?? []).filter((s) => s.state === 'OPEN' && s.canSubmit && !s.myProgress?.completed));
   const nextUp = open[0];
 
@@ -210,23 +215,55 @@ function StudentHome() {
       : { href: '/practice', title: 'Luyện tập', desc: 'Làm các bài công khai', icon: Dumbbell };
 
   const t = progress.data?.totals;
-  const announcements = useAsync(
-    async () => (current ? (await api.listThreads(current.id)).filter((x) => x.kind === 'ANNOUNCEMENT').slice(0, 3) : []),
-    [current?.id],
-  );
+  // Latest announcements across all current classes.
+  const currentIds = current.map((c) => c.id).join(',');
+  const announcements = useAsync(async () => {
+    const lists = await Promise.all(current.map((c) => api.listThreads(c.id)));
+    return lists
+      .flat()
+      .filter((x) => x.kind === 'ANNOUNCEMENT')
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 3);
+  }, [currentIds]);
+  const boardHref = current.length === 1 ? `/my-class/${current[0].id}` : '/my-class';
 
   return (
     <>
       <div className="mb-6">
-        {classes.loading && !classes.data ? null : current ? (
-          <p className="flex flex-wrap gap-x-4 text-sm text-slate-600">
-            <span>
-              Lớp <b className="text-slate-900">{current.name}</b>
-            </span>
-            <span>Giáo viên {current.teacherName}</span>
+        {classes.loading && !classes.data ? null : current.length > 0 ? (
+          <p className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
+            {current.map((c) => (
+              <span key={c.id}>
+                Lớp{' '}
+                <Link href={`/my-class/${c.id}`} className="font-semibold text-slate-900 hover:text-ink-700">
+                  {c.name}
+                </Link>
+                , giáo viên {c.teacherName}
+              </span>
+            ))}
           </p>
         ) : (
-          <InlineAlert kind="warning">Bạn chưa thuộc lớp nào. Hãy báo giáo viên để được xếp vào lớp.</InlineAlert>
+          pending.length === 0 && (
+            <InlineAlert kind="info">
+              Bạn chưa vào lớp nào. Có mã lớp thì vào{' '}
+              <Link href="/my-class" className="font-medium underline">
+                Lớp của tôi
+              </Link>{' '}
+              để xin vào lớp; trong lúc đó vẫn luyện tập được các bài công khai.
+            </InlineAlert>
+          )
+        )}
+        {pending.length > 0 && (
+          <Link
+            href="/my-class"
+            className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-panel border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 hover:bg-amber-100"
+          >
+            <Hourglass className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="flex-1">
+              Đang chờ giáo viên duyệt:{' '}
+              {pending.map((r) => `${r.kind === 'JOIN' ? 'vào' : 'rời'} lớp ${r.className}`).join('; ')}
+            </span>
+          </Link>
         )}
       </div>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
@@ -256,11 +293,11 @@ function StudentHome() {
           </Card>
         </div>
         <div className="space-y-4 self-start">
-        {current && announcements.data && announcements.data.length > 0 && (
+        {current.length > 0 && announcements.data && announcements.data.length > 0 && (
           <Card>
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
               <h2 className="font-semibold">Thông báo của lớp</h2>
-              <Link href="/my-class" className="text-sm text-ink-600 hover:underline">
+              <Link href={boardHref} className="text-sm text-ink-600 hover:underline">
                 Bảng tin
               </Link>
             </div>

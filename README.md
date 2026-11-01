@@ -5,7 +5,7 @@ Hệ thống chấm bài lập trình tự động cho lớp học:
 - **Ngân hàng của giáo viên**: mỗi giáo viên có ngân hàng bài tập và đề riêng (đây là "bản thiết kế"). Giáo viên tự soạn bài hoặc **tải đề `.docx` / `.pdf`** lên; hệ thống tách đề thành từng bài để giáo viên duyệt lại và chọn độ khó. Mỗi bài có test và **đáp án** (lời giải thích + code).
 - **Chia sẻ**: bài tập riêng tư theo mặc định. Có thể công khai riêng từng phần: đề bài, test ẩn, lời giải. Giáo viên khác xem và **lưu bản sao** về ngân hàng của mình (có ghi nguồn). Đề chỉ công khai được khi mọi bài trong đề đã công khai.
 - **Phiên (giao bài)**: giáo viên tạo một phiên từ một đề hoặc một bài, giao cho một lớp hoặc **công khai** cho mọi người, có thời gian mở/đóng tùy chọn. Phiên chụp lại nội dung bài lúc tạo, nên sửa ngân hàng không làm đổi đề đang làm. Bài nộp, điểm và trạng thái "đã giải" thuộc về từng phiên.
-- **Lớp**: mỗi lớp có một giáo viên phụ trách, nhiều học sinh và mã lớp riêng (ví dụ `22DTHC5`). Học sinh có một lớp đang học; các lớp cũ là lịch sử. Khi kết thúc khóa, giáo viên **lưu trữ** lớp: lớp chỉ còn đọc, học sinh vẫn xem lại được. Lớp đã lưu trữ có thể khôi phục, hẹn **xóa hẳn** sau N ngày, hoặc xóa ngay (phải gõ tên lớp để xác nhận).
+- **Lớp**: mỗi lớp có một giáo viên phụ trách, nhiều học sinh và mã lớp riêng (ví dụ `22DTHC5`). Học sinh có thể học **nhiều lớp cùng lúc** hoặc không thuộc lớp nào (thí sinh tự do, làm các phiên công khai và luyện tập). Học sinh muốn vào hay rời lớp phải **gửi yêu cầu** để giáo viên duyệt; giáo viên được chủ động thêm học sinh bằng email hoặc mời ra khỏi lớp. Các lớp đã rời là lịch sử. Khi kết thúc khóa, giáo viên **lưu trữ** lớp: lớp chỉ còn đọc, học sinh vẫn xem lại được. Lớp đã lưu trữ có thể khôi phục, hẹn **xóa hẳn** sau N ngày, hoặc xóa ngay (phải gõ tên lớp để xác nhận).
 - **Chế độ thi** (cài đặt cho từng phiên):
   - Thời gian làm bài riêng cho từng học sinh: bấm "Bắt đầu làm bài" thì đồng hồ mới chạy, và chỉ khi đó mới thấy đề. Hết giờ là khóa nộp; server kiểm tra theo giờ của server.
   - Đồng hồ đếm ngược có thông báo kèm âm thanh khi còn 15, 5, 1 phút và khi hết giờ.
@@ -19,7 +19,7 @@ Hệ thống chấm bài lập trình tự động cho lớp học:
   - Giáo viên mở ra so sánh code hai bên hoặc xem các dòng được đánh dấu, rồi tùy ý bấm "Đã xem".
 - **Bảng tin lớp**: giáo viên đăng thông báo (ghim được); học sinh hỏi đáp, có thể gắn câu hỏi với một bài trong phiên. Lớp đã lưu trữ thì bảng tin chỉ còn đọc.
 - **Học bạ**: học sinh thấy mình đã giải bài nào và hoàn thành đề nào, trong lớp nào. Học bạ vẫn còn sau khi lớp bị xóa hẳn (khi đó chỉ không mở lại được đề), và học sinh vẫn giữ code mình đã nộp.
-- **Đăng ký**: học sinh đăng ký bằng mã lớp và xác thực **email bằng mã OTP**. Giáo viên được admin **mời qua email** và tự đặt mật khẩu. Có chức năng quên mật khẩu.
+- **Đăng ký**: học sinh tự đăng ký và xác thực **email bằng mã OTP**; mã lớp không bắt buộc (nhập thì gửi luôn yêu cầu vào lớp đó). Giáo viên được admin **mời qua email** và tự đặt mật khẩu. Có chức năng quên mật khẩu.
 - **Admin** (duy nhất một tài khoản): quản lý tài khoản, xem được mọi ngân hàng và mọi lớp.
 - Chấm tự động C, C++, Python, Java, JavaScript; bảng điểm theo phiên; in đề và in đáp án từ ngân hàng.
 
@@ -46,7 +46,7 @@ pnpm monorepo:
 Mỗi context nằm trong `src/backend/src/modules/<context>` và chia lớp `domain / application / infrastructure / presentation`:
 
 - **identity**: aggregate `User` và `Verification` (OTP email, lời mời giáo viên). Bất biến "đúng một admin" được đảm bảo ở hai nơi: domain không có cách nào tạo ADMIN ngoài `bootstrapAdmin` khi khởi động, và database có partial unique index. Phát event `student-registered`, `user-deleted`.
-- **classroom**: aggregate `Classroom` (mã lớp, giáo viên, vòng đời ACTIVE → ARCHIVED → xóa hẳn, có hẹn giờ) và `Enrollment` (lịch sử lớp của học sinh, mỗi học sinh có một lớp hiện tại). Phát event `class-purged`.
+- **classroom**: aggregate `Classroom` (mã lớp, giáo viên, vòng đời ACTIVE → ARCHIVED → xóa hẳn, có hẹn giờ), `Enrollment` (lớp của học sinh, có thể nhiều lớp cùng lúc, lớp đã rời là lịch sử) và `MembershipRequest` (yêu cầu vào/rời lớp chờ giáo viên duyệt). Phát event `class-purged`.
 - **catalog**: ngân hàng bài tập. Aggregate `Problem` (chủ sở hữu, mức chia sẻ `Sharing`, các `TestCase`, `Solution`, nguồn sao chép). Phát event `problem-deleted`.
 - **importing**: domain service `ExamParser` (heuristic cho đề tiếng Việt/Anh), port `DocumentReader` (mammoth cho docx, unpdf cho pdf). Bài nhập vào ngân hàng của người nhập.
 - **assessment**: aggregate `ProblemSet` (đề trong ngân hàng) và `Session` (phiên: bản chụp các bài + thời gian mở/đóng, thuộc một lớp hoặc công khai). Projection **học bạ** (`learning_sessions`, `learning_progress`) được cập nhật từ event `submission-judged` và tồn tại độc lập với phiên và lớp.
@@ -105,7 +105,7 @@ pnpm dev:frontend
 - Admin mặc định lấy từ `.env`: `admin@oj.local` / `admin12345`. **Hãy đổi trước khi dùng thật.**
 - Gửi email: khi để trống `SMTP_HOST`, email (mã OTP, link mời) **được in ra log của backend** thay vì gửi thật. Để gửi bằng Gmail, bạn cần bật xác minh 2 bước cho tài khoản Gmail, tạo **App Password**, rồi đặt `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER=<gmail>` và `SMTP_PASS=<app password>`. Gmail giới hạn khoảng 500 email/ngày, đủ cho một lớp học.
 - AI: đặt `ANTHROPIC_API_KEY` trong `src/backend/.env`. Model chọn riêng cho từng việc: `CLAUDE_MODEL` cho đọc đề (mặc định `claude-sonnet-5-5`) và `CLAUDE_REVIEW_MODEL` cho kiểm tra dùng AI (mặc định `claude-haiku-5-5`, rẻ vì chạy trên từng bài nộp). Khi để trống key, đọc đề dùng bộ đọc theo mẫu và bỏ qua kiểm tra dùng AI. Với Sonnet/Opus, lệnh gọi bật sẵn *refusal fallback* phía server (`fallbacks: "default"`); Haiku không hỗ trợ nên không gửi tham số này.
-- Giáo viên tạo lớp và đặt mã lớp ở trang **Lớp**. Học sinh dùng mã đó khi đăng ký.
+- Giáo viên tạo lớp và đặt mã lớp ở trang **Lớp**. Học sinh dùng mã đó để xin vào lớp (khi đăng ký hoặc ở trang **Lớp của tôi**), rồi giáo viên duyệt ở trang lớp.
 - Không có Docker? Có thể chạy engine với `SANDBOX=local`: code chạy thẳng trên máy, **không cách ly**, chỉ dùng để thử.
 
 Kiểm thử:

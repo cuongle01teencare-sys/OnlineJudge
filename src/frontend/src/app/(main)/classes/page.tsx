@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Container } from '@/components/app-shell';
-import { ClassCode, ClassFormModal, MoveStudentControl } from '@/components/classes';
+import { ClassCode, ClassFormModal, MoveStudentControl, PendingRequestsBadge } from '@/components/classes';
 import { RequireRole, STAFF } from '@/components/guards';
 import { Badge, Button, Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/ui';
 import { api } from '@/lib/api';
@@ -29,9 +29,9 @@ function UnassignedStudents({ classes, onAssigned }: { classes: ClassroomDto[]; 
           <ErrorState message={error} onRetry={reload} />
         </div>
       ) : !data || data.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-slate-500">Mọi học sinh đều đã có lớp.</p>
+        <p className="px-5 py-4 text-sm text-slate-500">Mọi học sinh đều đang học ít nhất một lớp.</p>
       ) : classes.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-slate-600">Có {data.length} học sinh chưa có lớp. Tạo lớp trước để xếp các em vào lớp.</p>
+        <p className="px-5 py-4 text-sm text-slate-600">Có {data.length} học sinh chưa có lớp. Tạo lớp trước để thêm các em vào lớp.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -40,7 +40,7 @@ function UnassignedStudents({ classes, onAssigned }: { classes: ClassroomDto[]; 
                 <th className="px-4 py-2.5">Họ tên</th>
                 <th className="px-4 py-2.5">Email</th>
                 <th className="hidden px-4 py-2.5 md:table-cell">Số điện thoại</th>
-                <th className="px-4 py-2.5">Xếp vào lớp</th>
+                <th className="px-4 py-2.5">Thêm vào lớp</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -52,7 +52,7 @@ function UnassignedStudents({ classes, onAssigned }: { classes: ClassroomDto[]; 
                   <td className="px-4 py-2.5">
                     <MoveStudentControl
                       studentId={s.userId}
-                      currentClassId={null}
+                      excludeClassId={null}
                       classes={classes}
                       label="Chọn lớp"
                       onMoved={() => {
@@ -87,8 +87,8 @@ export default function ClassesPage() {
           title="Lớp"
           subtitle={
             isAdmin
-              ? 'Tất cả các lớp. Mỗi lớp có một giáo viên phụ trách và một mã để học sinh đăng ký.'
-              : 'Các lớp bạn phụ trách. Đưa mã lớp cho học sinh để các em đăng ký.'
+              ? 'Tất cả các lớp. Mỗi lớp có một giáo viên phụ trách và một mã để học sinh xin vào lớp.'
+              : 'Các lớp bạn phụ trách. Đưa mã lớp cho học sinh để các em xin vào lớp, rồi duyệt yêu cầu trong trang lớp.'
           }
           actions={
             <Button onClick={() => setCreating(true)}>
@@ -107,7 +107,7 @@ export default function ClassesPage() {
             </div>
           ) : classes.length === 0 ? (
             <EmptyState title="Chưa có lớp nào">
-              Tạo lớp đầu tiên, rồi đưa mã lớp cho học sinh để các em đăng ký. Đề cũng được giao theo lớp.
+              Tạo lớp đầu tiên, rồi đưa mã lớp cho học sinh để các em xin vào lớp. Đề cũng được giao theo lớp.
               <div className="mt-3">
                 <Button onClick={() => setCreating(true)}>
                   <Plus className="h-4 w-4" />
@@ -126,6 +126,7 @@ export default function ClassesPage() {
                     {c.status === 'ARCHIVED' && (
                       <Badge className="ml-2 bg-amber-100 text-amber-800 ring-1 ring-amber-200">Đã lưu trữ</Badge>
                     )}
+                    <PendingRequestsBadge count={c.pendingRequestCount} className="ml-2" />
                     <div className="flex flex-wrap gap-x-4 text-sm text-slate-500">
                       <span>Giáo viên: {c.teacherName}</span>
                       <span className="inline-flex items-center gap-1">

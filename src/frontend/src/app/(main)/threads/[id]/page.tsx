@@ -39,7 +39,7 @@ export default function ThreadPage() {
       </Container>
     );
 
-  const back = isStaff ? { href: `/classes/${t.classId}`, label: 'Về lớp' } : { href: '/my-class', label: 'Lớp của tôi' };
+  const back = { href: isStaff ? `/classes/${t.classId}` : `/my-class/${t.classId}`, label: 'Về lớp' };
 
   const send = async (e: FormEvent) => {
     e.preventDefault();

@@ -11,8 +11,8 @@ export interface StudentRegisteredEvent {
   name: typeof STUDENT_REGISTERED;
   occurredAt: Date;
   userId: string;
-  /** The class chosen (by class code) at sign-up. */
-  classId: string;
+  /** The class the student asked to join (by class code) at sign-up; null = no class yet. */
+  classId: string | null;
 }
 
 export interface UserDeletedEvent {

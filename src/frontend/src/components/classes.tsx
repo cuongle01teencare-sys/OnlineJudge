@@ -9,7 +9,7 @@ import { CLASS_CODE_RE, normalizeClassCode, suggestClassCode } from '@/lib/class
 import { useAsync } from '@/lib/use-async';
 import { cn, copyToClipboard } from '@/lib/utils';
 import { useToast } from './toast';
-import { Button, Field, InlineAlert, inputClass, Modal } from './ui';
+import { Badge, Button, Field, InlineAlert, inputClass, Modal } from './ui';
 
 /** A class join code, set large so it can be read aloud or copied onto the board. */
 export function ClassCode({ code, size = 'md' }: { code: string; size?: 'sm' | 'md' | 'lg' }) {
@@ -76,6 +76,16 @@ export function ClassCodeInput({
         Gợi ý
       </Button>
     </div>
+  );
+}
+
+/** "3 yêu cầu chờ duyệt" on class cards; nothing when there are none. */
+export function PendingRequestsBadge({ count, className }: { count: number | undefined; className?: string }) {
+  if (!count) return null;
+  return (
+    <Badge className={cn('bg-amber-100 text-amber-800 ring-1 ring-amber-200 tabular-nums', className)}>
+      {count} yêu cầu chờ duyệt
+    </Badge>
   );
 }
 
@@ -173,7 +183,7 @@ export function ClassFormModal({
             autoFocus
           />
         </Field>
-        <Field label="Mã lớp" hint="Học sinh nhập mã này khi đăng ký. Tự đặt mã dễ đọc, ví dụ 22DTHC5.">
+        <Field label="Mã lớp" hint="Học sinh nhập mã này để xin vào lớp. Tự đặt mã dễ đọc, ví dụ 22DTHC5.">
           <ClassCodeInput
             value={code}
             name={name}
@@ -195,33 +205,37 @@ export function ClassFormModal({
   );
 }
 
-/** Inline "Chuyển lớp" control: select a managed class, then confirm. */
+/**
+ * Inline "Thêm vào lớp" control: pick a managed class, then add the student to it.
+ * Adding never removes the student from other classes (a student may be in several).
+ */
 export function MoveStudentControl({
   studentId,
-  currentClassId,
+  excludeClassId,
   classes,
-  label = 'Chuyển lớp',
+  label = 'Thêm vào lớp khác',
   onMoved,
 }: {
   studentId: string;
-  currentClassId: string | null;
+  /** The class the row is shown in, left out of the options. */
+  excludeClassId: string | null;
   classes: ClassroomDto[];
   label?: string;
   onMoved: (classId: string) => void;
 }) {
   const toast = useToast();
-  const options = classes.filter((c) => c.id !== currentClassId);
+  const options = classes.filter((c) => c.id !== excludeClassId);
   const [target, setTarget] = useState('');
   const [busy, setBusy] = useState(false);
-  if (options.length === 0) return <span className="text-xs text-slate-400">Không có lớp khác</span>;
-  const move = async () => {
+  if (options.length === 0) return excludeClassId ? null : <span className="text-xs text-slate-400">Chưa có lớp nào đang học</span>;
+  const add = async () => {
     if (!target) return;
     setBusy(true);
     try {
       await api.moveStudent(studentId, target);
       const c = classes.find((x) => x.id === target);
-      const name = c?.name ?? '';
-      toast.success(currentClassId ? `Đã chuyển sang lớp ${name}` : `Đã xếp vào lớp ${name}`);
+      toast.success(`Đã thêm vào lớp ${c?.name ?? ''}`);
+      setTarget('');
       onMoved(target);
     } catch (e) {
       toast.error(errorMessage(e));
@@ -230,7 +244,7 @@ export function MoveStudentControl({
     }
   };
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
       <select
         className={cn(inputClass, 'w-auto py-1 text-sm')}
         value={target}
@@ -244,8 +258,8 @@ export function MoveStudentControl({
           </option>
         ))}
       </select>
-      <Button size="sm" variant="secondary" onClick={move} disabled={!target} loading={busy}>
-        {currentClassId ? 'Chuyển' : 'Xếp lớp'}
+      <Button size="sm" variant="secondary" onClick={add} disabled={!target} loading={busy}>
+        Thêm vào lớp
       </Button>
     </span>
   );

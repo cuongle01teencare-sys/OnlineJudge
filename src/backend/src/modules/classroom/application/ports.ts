@@ -12,5 +12,6 @@ export interface Person {
 export abstract class PeopleDirectory {
   abstract getPeople(ids: string[]): Promise<Map<string, Person>>;
   abstract listByRole(role: Role): Promise<Person[]>;
-  abstract startStudentRegistration(input: Omit<RegisterRequest, 'classCode'>, classId: string): Promise<VerificationTicketDto>;
+  abstract findByEmail(email: string): Promise<Person | null>;
+  abstract startStudentRegistration(input: Omit<RegisterRequest, 'classCode'>, classId: string | null): Promise<VerificationTicketDto>;
 }

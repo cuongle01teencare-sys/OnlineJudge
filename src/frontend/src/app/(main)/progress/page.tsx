@@ -89,7 +89,17 @@ function GroupCard({ g }: { g: Group }) {
   return (
     <Card className={cn('mb-6', deleted && 'border-dashed')}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-100 px-5 py-3">
-        <h2 className="text-lg font-semibold">{g.classId === null ? 'Luyện tập tự do' : `Lớp ${g.className ?? ''}`}</h2>
+        <h2 className="text-lg font-semibold">
+          {g.classId === null ? (
+            'Luyện tập tự do'
+          ) : deleted ? (
+            `Lớp ${g.className ?? ''}`
+          ) : (
+            <Link href={`/my-class/${g.classId}`} className="hover:text-ink-700">
+              Lớp {g.className ?? ''}
+            </Link>
+          )}
+        </h2>
         {g.classStatus === 'ARCHIVED' && <Badge className="bg-amber-100 text-amber-800 ring-1 ring-amber-200">Đã lưu trữ</Badge>}
         {deleted && <Badge className="bg-slate-100 text-slate-600">Lớp đã bị xóa</Badge>}
         <span className="ml-auto text-sm text-slate-500 tabular-nums">{solved} bài đã giải</span>

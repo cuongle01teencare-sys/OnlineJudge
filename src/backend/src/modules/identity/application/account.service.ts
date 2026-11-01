@@ -32,8 +32,8 @@ export class AccountService {
 
   // ---------- Student sign-up (2 steps) ----------
 
-  /** `classId` was resolved from the class code by the Classroom context. */
-  async requestRegistration(input: Omit<RegisterRequest, 'classCode'>, classId: string): Promise<VerificationTicketDto> {
+  /** `classId` (optional) was resolved from the class code by the Classroom context. */
+  async requestRegistration(input: Omit<RegisterRequest, 'classCode'>, classId: string | null): Promise<VerificationTicketDto> {
     const email = Email.of(input.email);
     const displayName = DisplayName.of(input.displayName);
     const phone = Phone.optional(input.phone);
@@ -52,7 +52,7 @@ export class AccountService {
     const verification = Verification.issue('REGISTER_STUDENT', email, {
       displayName: displayName.value,
       phone: phone?.value ?? null,
-      classId,
+      classId: classId ?? undefined,
       passwordHash: await this.hasher.hash(input.password),
     }, hash);
     await this.verifications.save(verification);
@@ -74,7 +74,7 @@ export class AccountService {
       passwordHash: payload.passwordHash!,
     });
     await this.users.save(user);
-    const event: StudentRegisteredEvent = { name: STUDENT_REGISTERED, occurredAt: new Date(), userId: user.id, classId: payload.classId! };
+    const event: StudentRegisteredEvent = { name: STUDENT_REGISTERED, occurredAt: new Date(), userId: user.id, classId: payload.classId ?? null };
     await this.events.publish([event]);
     return this.authResponse(user);
   }

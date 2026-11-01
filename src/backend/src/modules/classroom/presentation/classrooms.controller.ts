@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { IsEmail, IsInt, IsOptional, IsString, IsUUID, Length, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator';
 import type { Actor } from '../../../shared/application/actor.js';
@@ -15,6 +15,19 @@ class MoveStudentBody {
   @IsUUID() classId: string;
 }
 
+class AddStudentBody {
+  @IsEmail({}, { message: 'Email không hợp lệ.' }) email: string;
+}
+
+class JoinClassBody {
+  @IsString() @Length(1, 40, { message: 'Hãy nhập mã lớp.' }) classCode: string;
+  @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(500) message?: string | null;
+}
+
+class LeaveClassBody {
+  @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(500) message?: string | null;
+}
+
 class ScheduleDeletionBody {
   @Type(() => Number) @IsInt() @Min(1) @Max(365) days: number;
 }
@@ -28,7 +41,7 @@ class RegisterBody {
   @IsString() @MinLength(6, { message: 'Mật khẩu phải có ít nhất 6 ký tự.' }) @MaxLength(128) password: string;
   @IsString() @Length(2, 80, { message: 'Họ tên phải từ 2 đến 80 ký tự.' }) displayName: string;
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(20) phone: string | null = null;
-  @IsString() @Length(1, 40, { message: 'Hãy nhập mã lớp.' }) classCode: string;
+  @IsOptional() @ValidateIf((_, v) => v !== null && v !== '') @IsString() @Length(1, 40) classCode: string | null = null;
 }
 
 @Controller('classes')
@@ -47,12 +60,18 @@ export class ClassroomsController {
   }
 
   @Put('students/:studentId') @Roles('ADMIN', 'TEACHER')
-  moveStudent(
+  addStudent(
     @CurrentActor() actor: Actor,
     @Param('studentId', ParseUUIDPipe) studentId: string,
     @Body() body: MoveStudentBody,
   ) {
-    return this.classrooms.moveStudent(actor, studentId, body.classId);
+    return this.classrooms.addStudent(actor, studentId, body.classId);
+  }
+
+  /** Student: ask to join a class by its code. */
+  @Post('join') @Roles('STUDENT')
+  join(@CurrentActor() actor: Actor, @Body() body: JoinClassBody) {
+    return this.classrooms.requestJoin(actor, body.classCode, body.message);
   }
 
   @Post() @Roles('ADMIN', 'TEACHER')
@@ -98,6 +117,62 @@ export class ClassroomsController {
   @Get(':id/students') @Roles('ADMIN', 'TEACHER')
   roster(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
     return this.classrooms.roster(actor, id);
+  }
+
+  @Post(':id/students') @Roles('ADMIN', 'TEACHER')
+  addByEmail(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string, @Body() body: AddStudentBody) {
+    return this.classrooms.addStudentByEmail(actor, id, body.email);
+  }
+
+  @Delete(':id/students/:studentId') @Roles('ADMIN', 'TEACHER') @HttpCode(204)
+  removeStudent(
+    @CurrentActor() actor: Actor,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('studentId', ParseUUIDPipe) studentId: string,
+  ) {
+    return this.classrooms.removeStudent(actor, id, studentId);
+  }
+
+  /** Student: ask to leave a class. */
+  @Post(':id/leave') @Roles('STUDENT') @HttpCode(201)
+  leave(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string, @Body() body: LeaveClassBody) {
+    return this.classrooms.requestLeave(actor, id, body.message);
+  }
+
+  /** Pending join/leave requests of the class. */
+  @Get(':id/requests') @Roles('ADMIN', 'TEACHER')
+  requests(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.classrooms.classRequests(actor, id);
+  }
+
+  @Post(':id/requests/approve-all') @Roles('ADMIN', 'TEACHER') @HttpCode(200)
+  async approveAll(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return { approved: await this.classrooms.approveAllJoins(actor, id) };
+  }
+}
+
+@Controller('membership-requests')
+export class MembershipRequestsController {
+  constructor(private readonly classrooms: ClassroomService) {}
+
+  @Get('mine') @Roles('STUDENT')
+  mine(@CurrentActor() actor: Actor) {
+    return this.classrooms.myRequests(actor);
+  }
+
+  @Post(':id/approve') @Roles('ADMIN', 'TEACHER') @HttpCode(200)
+  approve(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.classrooms.decide(actor, id, true);
+  }
+
+  @Post(':id/reject') @Roles('ADMIN', 'TEACHER') @HttpCode(200)
+  reject(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.classrooms.decide(actor, id, false);
+  }
+
+  @Post(':id/cancel') @Roles('STUDENT') @HttpCode(200)
+  cancel(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.classrooms.cancelRequest(actor, id);
   }
 }
 

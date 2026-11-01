@@ -14,7 +14,7 @@ Roles: `ADMIN` (exactly one, seeded from env), `TEACHER` (invited by admin by em
 |---|---|---|---|---|
 | POST | /auth/login | public | LoginRequest | AuthResponse |
 | GET | /auth/me | any | – | UserDto |
-| POST | /auth/register | public | RegisterRequest (`classCode` = join code of a class) | 202 VerificationTicketDto — a 6-digit OTP is emailed; no account yet. The student is enrolled in that class once verified |
+| POST | /auth/register | public | RegisterRequest (`classCode` optional) | 202 VerificationTicketDto — a 6-digit OTP is emailed; no account yet. With a class code, a JOIN request to that class is created once verified (the teacher approves); without one the student is a free candidate |
 | POST | /auth/register/verify | public | VerifyCodeRequest | AuthResponse (account created, role STUDENT) |
 | POST | /auth/verification/resend | public | ResendCodeRequest | VerificationTicketDto (409 if before `resendAvailableAt`) |
 | POST | /auth/password/forgot | public | ForgotPasswordRequest | 202 VerificationTicketDto (same answer whether the email exists or not) |
@@ -48,27 +48,45 @@ Phone is optional, Vietnamese format, stored for contact only (not verified).
   students can still open the sessions) → can be restored, or deleted for good (scheduled after N days,
   or immediately with name confirmation). Deleting removes the class and its sessions; students keep their
   learning record (titles and results, no access to statements) and their own submitted code.
-- A student has at most **one current class**; classes they left or that were archived remain as history.
+- A student may be in **several classes** at once, or in none (free candidate: public sessions and practice only).
+  Students only *ask* to join (by class code) or to leave; the class manager approves or rejects. Managers act
+  directly: add a student by email, remove a student. Classes a student left or that were archived remain as history.
 
 ## Classes (lớp)
 "Manager" of a class = its teacher or the admin.
 
 | Method | Path | Who | Body | Response |
 |---|---|---|---|---|
-| GET | /classes | any | – | ClassroomDto[] — admin: all; teacher: classes they teach; student: current class + history (`code` null, `isCurrent`) |
+| GET | /classes | any | – | ClassroomDto[] — admin: all; teacher: classes they teach; student: current classes + history (`code` null, `isCurrent`); managers also get `pendingRequestCount` |
 | POST | /classes | staff | UpsertClassroomRequest | ClassroomDto. Teachers always create for themselves; admin may pass `teacherId` |
 | GET | /classes/:id | manager or (former) member | – | ClassroomDto |
 | PUT | /classes/:id | manager | UpsertClassroomRequest | ClassroomDto (changing `teacherId`: admin only; not allowed while archived) |
 | POST | /classes/:id/archive | manager | – | ClassroomDto (status ARCHIVED) |
-| POST | /classes/:id/restore | manager | – | ClassroomDto (ACTIVE again, cancels scheduled deletion; students who joined another class meanwhile stay there) |
+| POST | /classes/:id/restore | manager | – | ClassroomDto (ACTIVE again, cancels scheduled deletion) |
 | POST | /classes/:id/schedule-deletion | manager | ScheduleClassDeletionRequest | ClassroomDto (`purgeAt` set; class must be archived) |
 | POST | /classes/:id/cancel-deletion | manager | – | ClassroomDto |
 | POST | /classes/:id/delete-now | manager | DeleteClassNowRequest | 204 (class must be archived; `confirmName` must equal the name) |
 | GET | /classes/:id/students | manager | – | ClassStudentDto[] (current students) |
+| POST | /classes/:id/students | manager | AddStudentRequest | ClassStudentDto — adds a registered student by email (404 if no such student account); settles their pending requests for the class |
+| DELETE | /classes/:id/students/:studentId | manager | – | 204 — removes the student; the class stays in their history |
 | GET | /classes/unassigned-students | ADMIN | – | ClassStudentDto[] (students with no current class) |
-| PUT | /classes/students/:studentId | staff | MoveStudentRequest | ClassStudentDto — assign/move to an ACTIVE class; a teacher must manage both the current and the target class |
+| PUT | /classes/students/:studentId | manager of the target class | MoveStudentRequest | ClassStudentDto — adds the student to that ACTIVE class; other classes are not affected |
 
-Class codes: 4–20 chars `A-Z 0-9 -`, case-insensitive, unique (e.g. `22DTHC5`). Only ACTIVE classes accept sign-ups.
+### Join and leave requests
+| Method | Path | Who | Body | Response |
+|---|---|---|---|---|
+| POST | /classes/join | STUDENT | JoinClassRequest | 201 MembershipRequestDto (PENDING). 400 wrong code or archived class; 409 already a member or already pending |
+| POST | /classes/:id/leave | STUDENT (current member) | LeaveClassRequest | 201 MembershipRequestDto (PENDING). 409 already pending or class archived |
+| GET | /membership-requests/mine | STUDENT | – | MembershipRequestDto[] — last 30, newest first, every status |
+| POST | /membership-requests/:id/cancel | STUDENT (sender) | – | MembershipRequestDto (CANCELLED) |
+| GET | /classes/:id/requests | manager | – | MembershipRequestDto[] — pending JOIN and LEAVE requests, oldest first |
+| POST | /membership-requests/:id/approve | manager | – | MembershipRequestDto (APPROVED; JOIN opens the membership, LEAVE ends it). Class must be ACTIVE |
+| POST | /membership-requests/:id/reject | manager | – | MembershipRequestDto (REJECTED) |
+| POST | /classes/:id/requests/approve-all | manager | – | `{ approved: number }` — approves every pending JOIN request |
+
+A decided request cannot be decided again (409). Requests are deleted with their class or the student account.
+
+Class codes: 4–20 chars `A-Z 0-9 -`, case-insensitive, unique (e.g. `22DTHC5`). Only ACTIVE classes accept join requests.
 Deleting a teacher account hands their classes to the admin.
 
 ## Problem bank (catalog)

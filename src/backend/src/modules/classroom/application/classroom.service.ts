@@ -3,6 +3,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import type {
   ClassroomDto,
   ClassStudentDto,
+  MembershipRequestDto,
   RegisterRequest,
   UpsertClassroomRequest,
   VerificationTicketDto,
@@ -17,10 +18,12 @@ import {
   type UserDeletedEvent,
 } from '../../identity/identity.events.js';
 import { ClassCode, Classroom, Enrollment } from '../domain/classroom.js';
-import { ClassroomRepository, EnrollmentRepository } from '../domain/classroom.repository.js';
+import { ClassroomRepository, EnrollmentRepository, MembershipRequestRepository } from '../domain/classroom.repository.js';
+import { MembershipRequest } from '../domain/membership-request.js';
 import { PeopleDirectory, type Person } from './ports.js';
 
 const PURGE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const MY_REQUESTS_LIMIT = 30;
 
 @Injectable()
 export class ClassroomService implements OnModuleInit, OnModuleDestroy {
@@ -30,13 +33,14 @@ export class ClassroomService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly classes: ClassroomRepository,
     private readonly enrollments: EnrollmentRepository,
+    private readonly requests: MembershipRequestRepository,
     private readonly people: PeopleDirectory,
     private readonly events: EventPublisher,
   ) {}
 
   // ---------- Queries ----------
 
-  /** Admin: all classes. Teacher: classes they teach. Student: current class and history. */
+  /** Admin: all classes. Teacher: classes they teach. Student: current classes and history. */
   async list(actor: Actor): Promise<ClassroomDto[]> {
     if (actor.role === 'ADMIN') return this.toDtos(await this.classes.findAll(), actor);
     if (actor.role === 'TEACHER') return this.toDtos(await this.classes.findByTeacher(actor.id), actor);
@@ -61,7 +65,7 @@ export class ClassroomService implements OnModuleInit, OnModuleDestroy {
     return open.filter((e) => people.has(e.studentId)).map((e) => toStudentDto(people.get(e.studentId)!, e)).sort(byName);
   }
 
-  /** Students without a current class (e.g. their class was archived). Admin only. */
+  /** Students without any current class (free candidates, or their classes were archived). Admin only. */
   async unassigned(): Promise<ClassStudentDto[]> {
     const [students, open, active] = await Promise.all([
       this.people.listByRole('STUDENT'),
@@ -112,16 +116,9 @@ export class ClassroomService implements OnModuleInit, OnModuleDestroy {
     return (await this.toDtos([classroom], actor))[0];
   }
 
-  /** Students who joined another class meanwhile stay there (one current class per student). */
   async restore(actor: Actor, id: string): Promise<ClassroomDto> {
     const classroom = await this.loadManaged(actor, id);
     classroom.restore();
-    for (const membership of await this.enrollments.findOpenByClass(id)) {
-      if (await this.currentClassId(membership.studentId, id)) {
-        membership.end();
-        await this.enrollments.save(membership);
-      }
-    }
     await this.classes.save(classroom);
     return (await this.toDtos([classroom], actor))[0];
   }
@@ -145,45 +142,122 @@ export class ClassroomService implements OnModuleInit, OnModuleDestroy {
     await this.purge(classroom, confirmName);
   }
 
-  /** Assign a student to an active class, or move them from their current class. */
-  async moveStudent(actor: Actor, studentId: string, classId: string): Promise<ClassStudentDto> {
-    const target = await this.loadManaged(actor, classId);
-    target.ensureActive();
+  /** Teacher/admin puts a student into the class directly. The student's other classes are not affected. */
+  async addStudent(actor: Actor, studentId: string, classId: string): Promise<ClassStudentDto> {
     const student = (await this.people.getPeople([studentId])).get(studentId);
-    if (!student || student.role !== 'STUDENT') {
-      throw DomainError.notFound('classroom.student_not_found', 'Không tìm thấy học sinh.');
-    }
-    const currentId = await this.currentClassId(studentId);
-    if (currentId && currentId !== classId) {
-      const source = await this.classes.findById(currentId);
-      if (source && !source.isManagedBy(actor)) {
-        throw DomainError.forbidden('classroom.not_teacher', 'Học sinh đang ở lớp của giáo viên khác; hãy nhờ quản trị viên chuyển lớp.');
-      }
-    }
-    const membership = await this.join(studentId, classId);
-    return toStudentDto(student, membership);
+    return this.admit(actor, classId, student ?? null);
   }
 
-  /** Student sign-up step 1: resolve the class code, then let Identity send the OTP. */
+  async addStudentByEmail(actor: Actor, classId: string, email: string): Promise<ClassStudentDto> {
+    return this.admit(actor, classId, await this.people.findByEmail(email));
+  }
+
+  /** Teacher/admin takes a student out of the class. History and code stay with the student. */
+  async removeStudent(actor: Actor, classId: string, studentId: string): Promise<void> {
+    const classroom = await this.loadManaged(actor, classId);
+    classroom.ensureActive();
+    const membership = await this.enrollments.find(studentId, classId);
+    if (!membership?.isOpen) throw DomainError.notFound('classroom.not_member', 'Học sinh không còn ở lớp này.');
+    membership.end();
+    await this.enrollments.save(membership);
+    await this.closePending(studentId, classId, actor.id);
+  }
+
+  /** Student sign-up step 1: resolve the optional class code, then let Identity send the OTP. */
   async startRegistration(input: RegisterRequest): Promise<VerificationTicketDto> {
-    const classroom = await this.classes.findByCode(ClassCode.of(input.classCode));
-    if (!classroom || !classroom.isActive) {
-      throw DomainError.validation('classroom.wrong_code', 'Mã lớp không đúng hoặc lớp đã kết thúc. Hãy hỏi giáo viên để lấy mã lớp.');
+    const { classCode, ...account } = input;
+    const classroom = classCode?.trim() ? await this.findJoinable(classCode) : null;
+    return this.people.startStudentRegistration(account, classroom?.id ?? null);
+  }
+
+  // ---------- Join / leave requests (students ask, the teacher decides) ----------
+
+  async requestJoin(actor: Actor, classCode: string, message?: string | null): Promise<MembershipRequestDto> {
+    ensureStudent(actor);
+    const classroom = await this.findJoinable(classCode);
+    if ((await this.enrollments.find(actor.id, classroom.id))?.isOpen) {
+      throw DomainError.conflict('classroom.already_member', `Bạn đã ở trong lớp ${classroom.name}.`);
     }
-    const { classCode: _, ...account } = input;
-    return this.people.startStudentRegistration(account, classroom.id);
+    if (await this.requests.findPending(actor.id, classroom.id, 'JOIN')) {
+      throw DomainError.conflict('classroom.request_exists', `Bạn đã gửi yêu cầu vào lớp ${classroom.name}, hãy chờ giáo viên duyệt.`);
+    }
+    const request = MembershipRequest.join(actor.id, classroom.id, message);
+    await this.requests.save(request);
+    return (await this.toRequestDtos([request]))[0];
+  }
+
+  async requestLeave(actor: Actor, classId: string, message?: string | null): Promise<MembershipRequestDto> {
+    ensureStudent(actor);
+    const classroom = await this.load(classId);
+    if (!(await this.enrollments.find(actor.id, classId))?.isOpen) throw notFound();
+    classroom.ensureActive();
+    if (await this.requests.findPending(actor.id, classId, 'LEAVE')) {
+      throw DomainError.conflict('classroom.request_exists', 'Bạn đã gửi yêu cầu rời lớp này, hãy chờ giáo viên duyệt.');
+    }
+    const request = MembershipRequest.leave(actor.id, classId, message);
+    await this.requests.save(request);
+    return (await this.toRequestDtos([request]))[0];
+  }
+
+  async cancelRequest(actor: Actor, id: string): Promise<MembershipRequestDto> {
+    const request = await this.requests.findById(id);
+    if (!request) throw requestNotFound();
+    request.cancel(actor.id);
+    await this.requests.save(request);
+    return (await this.toRequestDtos([request]))[0];
+  }
+
+  async myRequests(actor: Actor): Promise<MembershipRequestDto[]> {
+    ensureStudent(actor);
+    return this.toRequestDtos(await this.requests.findByStudent(actor.id, MY_REQUESTS_LIMIT));
+  }
+
+  /** Pending requests of a class, oldest first. */
+  async classRequests(actor: Actor, classId: string): Promise<MembershipRequestDto[]> {
+    await this.loadManaged(actor, classId);
+    return this.toRequestDtos(await this.requests.findPendingByClass(classId));
+  }
+
+  async decide(actor: Actor, id: string, approve: boolean): Promise<MembershipRequestDto> {
+    const request = await this.requests.findById(id);
+    if (!request) throw requestNotFound();
+    const classroom = await this.loadManaged(actor, request.classId);
+    if (approve) {
+      classroom.ensureActive();
+      request.approve(actor.id);
+      await this.applyApproved(request);
+    } else {
+      request.reject(actor.id);
+    }
+    await this.requests.save(request);
+    return (await this.toRequestDtos([request]))[0];
+  }
+
+  /** Approves every pending join request of the class (e.g. right after handing out the code). */
+  async approveAllJoins(actor: Actor, classId: string): Promise<number> {
+    const classroom = await this.loadManaged(actor, classId);
+    classroom.ensureActive();
+    const joins = (await this.requests.findPendingByClass(classId)).filter((r) => r.kind === 'JOIN');
+    for (const request of joins) {
+      request.approve(actor.id);
+      await this.applyApproved(request);
+      await this.requests.save(request);
+    }
+    return joins.length;
   }
 
   // ---------- Reactions to other contexts ----------
 
+  /** A class code given at sign-up becomes a join request for the teacher to approve. */
   @OnEvent(STUDENT_REGISTERED, { async: true, promisify: true })
   async onStudentRegistered(event: StudentRegisteredEvent): Promise<void> {
+    if (!event.classId) return;
     const classroom = await this.classes.findById(event.classId);
     if (!classroom?.isActive) {
-      this.logger.warn(`Class ${event.classId} is gone or archived; student ${event.userId} stays unassigned`);
+      this.logger.warn(`Class ${event.classId} is gone or archived; no join request for student ${event.userId}`);
       return;
     }
-    await this.join(event.userId, event.classId);
+    await this.requests.save(MembershipRequest.join(event.userId, event.classId));
   }
 
   /** Students lose their memberships; a deleted teacher's classes go to the administrator. */
@@ -191,6 +265,7 @@ export class ClassroomService implements OnModuleInit, OnModuleDestroy {
   async onUserDeleted(event: UserDeletedEvent): Promise<void> {
     if (event.role === 'STUDENT') {
       await this.enrollments.deleteByStudent(event.userId);
+      await this.requests.deleteByStudent(event.userId);
       return;
     }
     const orphaned = await this.classes.findByTeacher(event.userId);
@@ -231,28 +306,56 @@ export class ClassroomService implements OnModuleInit, OnModuleDestroy {
     // Sessions and their content go first (subscribers), then the class itself.
     await this.events.publish(classroom.pullEvents());
     await this.enrollments.deleteByClass(classroom.id);
+    await this.requests.deleteByClass(classroom.id);
     await this.classes.delete(classroom.id);
     this.logger.log(`Class ${classroom.name} (${classroom.id}) deleted for good`);
   }
 
   // ---------- Helpers ----------
 
-  /** The student's current class: an open membership in an ACTIVE class (optionally ignoring one class). */
-  private async currentClassId(studentId: string, except?: string): Promise<string | null> {
-    const open = (await this.enrollments.findByStudent(studentId)).filter((m) => m.isOpen && m.classId !== except);
-    if (!open.length) return null;
-    const classes = await this.classes.findByIds(open.map((m) => m.classId));
-    return classes.find((c) => c.isActive)?.id ?? null;
+  private async admit(actor: Actor, classId: string, student: Person | null): Promise<ClassStudentDto> {
+    const classroom = await this.loadManaged(actor, classId);
+    classroom.ensureActive();
+    if (!student || student.role !== 'STUDENT') {
+      throw DomainError.notFound('classroom.student_not_found', 'Không tìm thấy tài khoản học sinh này.');
+    }
+    const membership = await this.join(student.id, classId);
+    await this.closePending(student.id, classId, actor.id);
+    return toStudentDto(student, membership);
   }
 
-  /** Makes `classId` the student's current class, ending the previous current membership. */
-  private async join(studentId: string, classId: string): Promise<Enrollment> {
-    const currentId = await this.currentClassId(studentId, classId);
-    if (currentId) {
-      const previous = await this.enrollments.find(studentId, currentId);
-      previous?.end();
-      if (previous) await this.enrollments.save(previous);
+  /** The teacher acted directly: pending requests of that student for this class are settled. */
+  private async closePending(studentId: string, classId: string, deciderId: string) {
+    for (const kind of ['JOIN', 'LEAVE'] as const) {
+      const request = await this.requests.findPending(studentId, classId, kind);
+      if (!request) continue;
+      request.approve(deciderId);
+      await this.requests.save(request);
     }
+  }
+
+  private async applyApproved(request: MembershipRequest) {
+    if (request.kind === 'JOIN') {
+      await this.join(request.studentId, request.classId);
+      return;
+    }
+    const membership = await this.enrollments.find(request.studentId, request.classId);
+    if (membership?.isOpen) {
+      membership.end();
+      await this.enrollments.save(membership);
+    }
+  }
+
+  private async findJoinable(classCode: string): Promise<Classroom> {
+    const classroom = await this.classes.findByCode(ClassCode.of(classCode));
+    if (!classroom || !classroom.isActive) {
+      throw DomainError.validation('classroom.wrong_code', 'Mã lớp không đúng hoặc lớp đã kết thúc. Hãy hỏi giáo viên để lấy mã lớp.');
+    }
+    return classroom;
+  }
+
+  /** Opens (or reopens) the student's membership of the class. Other classes are not affected. */
+  private async join(studentId: string, classId: string): Promise<Enrollment> {
     let membership = await this.enrollments.find(studentId, classId);
     if (membership) {
       if (!membership.isOpen) membership.reopen();
@@ -290,8 +393,10 @@ export class ClassroomService implements OnModuleInit, OnModuleDestroy {
 
   private async toDtos(classes: Classroom[], actor: Actor, memberships?: Enrollment[]): Promise<ClassroomDto[]> {
     const ids = classes.map((c) => c.id);
-    const [counts, teachers] = await Promise.all([
+    const managed = classes.filter((c) => c.isManagedBy(actor)).map((c) => c.id);
+    const [counts, pending, teachers] = await Promise.all([
       this.enrollments.countOpenByClass(ids),
+      this.requests.countPendingByClass(managed),
       this.people.getPeople(classes.map((c) => c.teacherId)),
     ]);
     return classes.map((c) => {
@@ -308,12 +413,48 @@ export class ClassroomService implements OnModuleInit, OnModuleDestroy {
         purgeAt: c.purgeAt?.toISOString() ?? null,
         createdAt: c.createdAt.toISOString(),
         ...(membership ? { isCurrent: membership.isOpen && c.isActive } : {}),
+        ...(c.isManagedBy(actor) ? { pendingRequestCount: pending.get(c.id) ?? 0 } : {}),
+      };
+    });
+  }
+
+  private async toRequestDtos(requests: MembershipRequest[]): Promise<MembershipRequestDto[]> {
+    const classes = new Map((await this.classes.findByIds(requests.map((r) => r.classId))).map((c) => [c.id, c]));
+    const people = await this.people.getPeople([
+      ...requests.flatMap((r) => [r.studentId, r.snapshot.decidedById ?? '']),
+      ...[...classes.values()].map((c) => c.teacherId),
+    ].filter(Boolean));
+    return requests.map((r) => {
+      const s = r.snapshot;
+      const classroom = classes.get(s.classId);
+      const student = people.get(s.studentId);
+      return {
+        id: r.id,
+        kind: s.kind,
+        status: s.status,
+        classId: s.classId,
+        className: classroom?.name ?? '(lớp đã xóa)',
+        teacherName: (classroom && people.get(classroom.teacherId)?.displayName) ?? '(không rõ)',
+        studentId: s.studentId,
+        studentName: student?.displayName ?? '(không rõ)',
+        studentEmail: student?.email ?? '',
+        message: s.message,
+        createdAt: s.createdAt.toISOString(),
+        decidedAt: s.decidedAt?.toISOString() ?? null,
+        decidedByName: s.decidedById ? (people.get(s.decidedById)?.displayName ?? null) : null,
       };
     });
   }
 }
 
 const notFound = () => DomainError.notFound('classroom.not_found', 'Không tìm thấy lớp.');
+const requestNotFound = () => DomainError.notFound('classroom.request_not_found', 'Không tìm thấy yêu cầu.');
+
+function ensureStudent(actor: Actor) {
+  if (actor.role !== 'STUDENT') {
+    throw DomainError.forbidden('classroom.students_only', 'Chỉ học sinh mới gửi yêu cầu vào hoặc rời lớp.');
+  }
+}
 const byName = (a: ClassStudentDto, b: ClassStudentDto) => a.displayName.localeCompare(b.displayName, 'vi');
 
 function toStudentDto(person: Person, enrollment: Enrollment | null): ClassStudentDto {

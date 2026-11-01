@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import type { ClassStatus } from '@oj/contracts';
+import type { ClassStatus, MembershipRequestKind, MembershipRequestStatus } from '@oj/contracts';
 import { Column, Entity, In, Index, IsNull, LessThanOrEqual, PrimaryColumn, Repository } from 'typeorm';
 import { ClassCode, Classroom, Enrollment } from '../domain/classroom.js';
-import { ClassroomRepository, EnrollmentRepository } from '../domain/classroom.repository.js';
+import { ClassroomRepository, EnrollmentRepository, MembershipRequestRepository } from '../domain/classroom.repository.js';
+import { MembershipRequest } from '../domain/membership-request.js';
 
 @Entity('classrooms')
 export class ClassroomOrmEntity {
@@ -145,3 +146,81 @@ function toEnrollment(row: EnrollmentOrmEntity): Enrollment {
   return Enrollment.rehydrate(row.studentId, row.classId, row.enrolledAt, row.endedAt);
 }
 
+
+@Entity('membership_requests')
+@Index(['classId', 'status'])
+@Index(['studentId', 'createdAt'])
+export class MembershipRequestOrmEntity {
+  @PrimaryColumn('uuid') id: string;
+  @Column({ type: 'varchar', length: 8 }) kind: string;
+  @Column({ type: 'varchar', length: 12 }) status: string;
+  @Column('uuid') studentId: string;
+  @Column('uuid') classId: string;
+  @Column('text', { nullable: true }) message: string | null;
+  @Column('timestamptz') createdAt: Date;
+  @Column('timestamptz', { nullable: true }) decidedAt: Date | null;
+  @Column('uuid', { nullable: true }) decidedById: string | null;
+}
+
+@Injectable()
+export class TypeOrmMembershipRequestRepository extends MembershipRequestRepository {
+  constructor(@InjectRepository(MembershipRequestOrmEntity) private readonly repo: Repository<MembershipRequestOrmEntity>) {
+    super();
+  }
+
+  async findById(id: string) {
+    const row = await this.repo.findOneBy({ id });
+    return row ? toRequest(row) : null;
+  }
+
+  async findPending(studentId: string, classId: string, kind: MembershipRequestKind) {
+    const row = await this.repo.findOneBy({ studentId, classId, kind, status: 'PENDING' });
+    return row ? toRequest(row) : null;
+  }
+
+  async findPendingByClass(classId: string) {
+    return (await this.repo.find({ where: { classId, status: 'PENDING' }, order: { createdAt: 'ASC' } })).map(toRequest);
+  }
+
+  async findByStudent(studentId: string, limit: number) {
+    return (await this.repo.find({ where: { studentId }, order: { createdAt: 'DESC' }, take: limit })).map(toRequest);
+  }
+
+  async countPendingByClass(classIds: string[]) {
+    if (!classIds.length) return new Map<string, number>();
+    const rows = await this.repo
+      .createQueryBuilder('r')
+      .select('r.classId', 'classId')
+      .addSelect('COUNT(*)', 'count')
+      .where('r.classId IN (:...classIds)', { classIds })
+      .andWhere("r.status = 'PENDING'")
+      .groupBy('r.classId')
+      .getRawMany<{ classId: string; count: string }>();
+    return new Map(rows.map((r) => [r.classId, Number(r.count)]));
+  }
+
+  async save(r: MembershipRequest) {
+    await this.repo.save({ id: r.id, ...r.snapshot });
+  }
+
+  async deleteByStudent(studentId: string) {
+    await this.repo.delete({ studentId });
+  }
+
+  async deleteByClass(classId: string) {
+    await this.repo.delete({ classId });
+  }
+}
+
+function toRequest(row: MembershipRequestOrmEntity): MembershipRequest {
+  return MembershipRequest.rehydrate(row.id, {
+    kind: row.kind as MembershipRequestKind,
+    status: row.status as MembershipRequestStatus,
+    studentId: row.studentId,
+    classId: row.classId,
+    message: row.message,
+    createdAt: row.createdAt,
+    decidedAt: row.decidedAt,
+    decidedById: row.decidedById,
+  });
+}

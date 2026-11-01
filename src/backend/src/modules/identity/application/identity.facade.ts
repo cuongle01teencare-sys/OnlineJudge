@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { RegisterRequest, Role, VerificationTicketDto } from '@oj/contracts';
+import { Email } from '../domain/user.js';
 import { UserRepository } from '../domain/user.repository.js';
 import { AccountService } from './account.service.js';
 
@@ -27,8 +28,19 @@ export class IdentityFacade {
     return (await this.users.findByRole(role)).map(summary);
   }
 
-  /** Starts student sign-up into an already-resolved class. */
-  requestStudentRegistration(input: Omit<RegisterRequest, 'classCode'>, classId: string): Promise<VerificationTicketDto> {
+  async findByEmail(email: string): Promise<UserSummary | null> {
+    let address: Email;
+    try {
+      address = Email.of(email);
+    } catch {
+      return null;
+    }
+    const user = await this.users.findByEmail(address);
+    return user ? summary(user) : null;
+  }
+
+  /** Starts student sign-up, optionally with a class (already resolved from its code) to ask to join. */
+  requestStudentRegistration(input: Omit<RegisterRequest, 'classCode'>, classId: string | null): Promise<VerificationTicketDto> {
     return this.accounts.requestRegistration(input, classId);
   }
 }

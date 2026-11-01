@@ -63,7 +63,9 @@ export default function SessionPage() {
       ? { href: '/practice', label: 'Luyện tập' }
       : isStaff && s.classId
         ? { href: `/classes/${s.classId}`, label: `Lớp ${s.className ?? ''}` }
-        : { href: '/my-class', label: 'Lớp của tôi' };
+        : s.classId
+          ? { href: `/my-class/${s.classId}`, label: `Lớp ${s.className ?? ''}` }
+          : { href: '/my-class', label: 'Lớp của tôi' };
 
   const remove = async () => {
     setDeleting(true);

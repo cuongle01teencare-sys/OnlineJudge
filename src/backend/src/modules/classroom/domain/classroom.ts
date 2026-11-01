@@ -143,8 +143,8 @@ function validName(name: string): string {
 
 /**
  * A student's membership of one class. Open (endedAt null) while the student is in the class;
- * ended when they move to another class. Ended memberships are kept as history.
- * Invariant (enforced by the application service): at most one open membership in an ACTIVE class.
+ * ended when they leave (approved request) or the teacher removes them. Ended memberships are
+ * kept as history. A student may have open memberships in several classes.
  */
 export class Enrollment {
   private constructor(

@@ -271,7 +271,7 @@ export default function UsersPage() {
       <Container>
         <PageHeader
           title="Người dùng"
-          subtitle="Học sinh tự đăng ký bằng mã lớp của mình. Giáo viên được mời qua email."
+          subtitle="Học sinh tự đăng ký tài khoản rồi xin vào lớp bằng mã lớp. Giáo viên được mời qua email."
           actions={
             <Button onClick={() => setInviting(true)}>
               <MailPlus className="h-4 w-4" />
@@ -384,7 +384,7 @@ export default function UsersPage() {
                 </span>
               )}
               {deleting?.role === 'STUDENT' && (
-                <span className="mt-2 block">Học sinh cũng sẽ bị xóa khỏi lớp.</span>
+                <span className="mt-2 block">Học sinh cũng sẽ bị xóa khỏi mọi lớp đang học.</span>
               )}
             </>
           }
