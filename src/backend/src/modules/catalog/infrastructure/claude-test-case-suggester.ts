@@ -21,7 +21,7 @@ const SuggestionsSchema = z.object({
 const SYSTEM = `Bạn giúp giáo viên tin học viết thêm test cho một bài lập trình (đề thường bằng tiếng Việt).
 Cách làm:
 1. Đọc kỹ đề, định dạng vào/ra và ràng buộc. Chọn các test bổ sung cho bộ test hiện có: trường hợp biên (giá trị nhỏ nhất/lớn nhất trong khả năng, n = 1, toàn số bằng nhau, số âm, kết quả 0...), trường hợp đặc biệt dễ sai, và vài test ngẫu nhiên vừa phải. Không lặp lại test đã có.
-2. Tính output bằng cách CHẠY CODE trong công cụ code execution: viết lời giải bằng Python (nếu có lời giải mẫu thì dựa theo nó, hoặc chạy chính nó nếu môi trường có trình biên dịch), kiểm tra lời giải với các test đã có, rồi chạy trên từng input mới. Với bài nhỏ, nên viết thêm một lời giải vét cạn để đối chiếu.
+2. LUÔN tính output bằng cách CHẠY CODE trong công cụ code execution trước khi trả lời, kể cả với bài rất đơn giản (giáo viên cần biết output đã được chạy thử): viết lời giải bằng Python (nếu có lời giải mẫu thì dựa theo nó, hoặc chạy chính nó nếu môi trường có trình biên dịch), kiểm tra lời giải với các test đã có, rồi chạy trên từng input mới. Với bài nhỏ, nên viết thêm một lời giải vét cạn để đối chiếu.
    outputVerified = true chỉ khi output được lấy từ kết quả chạy code VÀ lời giải đó cho đúng các test đã có (nếu có). Nếu phải tự tính tay thì đặt false.
 3. Mỗi input phải đúng định dạng đề và thỏa ràng buộc. Giữ test gọn: mỗi input tối đa khoảng 2000 ký tự. Nếu cần test rất lớn (ví dụ n = 10^5) thì không đưa vào, chỉ ghi vào notes để giáo viên tự sinh bằng chương trình.
 4. Hệ thống chấm đưa input vào đầu vào chuẩn và so sánh đầu ra chuẩn, không dùng file (kể cả khi đề nhắc tới file .INP/.OUT).
@@ -48,18 +48,24 @@ export class ClaudeTestCaseSuggester extends TestCaseSuggester {
   async suggest(context: TestSuggestionContext): Promise<TestCaseSuggestionsDto> {
     const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: 'user', content: prompt(context) }];
     let parsed: z.infer<typeof SuggestionsSchema> | null = null;
+    // Whether the model actually used the sandbox: without it no output counts as verified, whatever it claims.
+    let ranCode = false;
 
     // Server-side tools may pause a long turn; resend it unchanged to let the server continue.
+    // Streamed: the SDK refuses a non-streaming request this large (it could outlast the HTTP timeout).
     for (let round = 0; round < MAX_ROUNDS; round++) {
-      const response = await this.claude.api!.beta.messages.parse({
-        ...ClaudeClient.target(this.claude.models.testCases),
-        max_tokens: 32000,
-        system: SYSTEM,
-        thinking: { type: 'adaptive' },
-        output_config: { effort: 'medium', format: betaZodOutputFormat(SuggestionsSchema) },
-        tools: [{ type: 'code_execution_20260120', name: 'code_execution' }],
-        messages,
-      });
+      const response = await this.claude.api!.beta.messages
+        .stream({
+          ...ClaudeClient.target(this.claude.models.testCases),
+          max_tokens: 32000,
+          system: SYSTEM,
+          thinking: { type: 'adaptive' },
+          output_config: { effort: 'medium', format: betaZodOutputFormat(SuggestionsSchema) },
+          tools: [{ type: 'code_execution_20260120', name: 'code_execution' }],
+          messages,
+        })
+        .finalMessage();
+      ranCode ||= response.content.some((b) => b.type === 'server_tool_use');
       if (response.stop_reason === 'pause_turn') {
         messages.push({ role: 'assistant', content: response.content as Anthropic.Beta.BetaContentBlockParam[] });
         continue;
@@ -70,7 +76,7 @@ export class ClaudeTestCaseSuggester extends TestCaseSuggester {
       break;
     }
     if (!parsed) throw new Error('AI returned no test suggestions');
-    this.logger.log(`AI suggested ${parsed.tests.length} tests for "${context.title}"`);
+    this.logger.log(`AI suggested ${parsed.tests.length} tests for "${context.title}" (${ranCode ? 'ran code' : 'did not run code'})`);
 
     return {
       suggestions: parsed.tests
@@ -80,7 +86,7 @@ export class ClaudeTestCaseSuggester extends TestCaseSuggester {
           input: withNewline(t.input),
           expectedOutput: withNewline(t.expectedOutput),
           purpose: t.purpose.trim(),
-          outputVerified: t.outputVerified,
+          outputVerified: t.outputVerified && ranCode,
         })),
       // The judge never uses files, so hints about them only confuse the teacher.
       notes: parsed.notes.map((n) => n.trim()).filter((n) => n && !isAboutFileIo(n)),
