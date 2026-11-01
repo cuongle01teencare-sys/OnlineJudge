@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { ClaudeClient } from '../../../shared/infrastructure/claude.js';
 import { SmartExamReader, type UploadedFile } from '../application/ports.js';
 import { documentText, type ExamDocument } from '../domain/exam-document.js';
+import { SAMPLE_POINTS } from '../domain/exam-parser.js';
 
 const DraftsSchema = z.object({
   problems: z.array(
@@ -81,9 +82,11 @@ export class ClaudeExamReader extends SmartExamReader {
       constraints: p.constraints,
       timeLimitMs: clamp(Math.round(p.timeLimitMs), 100, 15_000),
       memoryLimitMb: clamp(Math.round(p.memoryLimitMb), 16, 1024),
-      samples: p.samples.filter((s) => s.input.trim() || s.expectedOutput.trim()).map((s) => ({
+      tests: p.samples.filter((s) => s.input.trim() || s.expectedOutput.trim()).map((s) => ({
         input: withNewline(s.input),
         expectedOutput: withNewline(s.expectedOutput),
+        isSample: true,
+        points: SAMPLE_POINTS,
       })),
       warnings: [
         ...(p.difficultyStated ? [] : ['Đề không ghi độ khó — AI đã ước lượng, hãy kiểm tra lại.']),

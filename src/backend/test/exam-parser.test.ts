@@ -44,9 +44,9 @@ test('splits a Vietnamese exam into problems with sections, limits and table sam
   assert.match(a.inputFormat, /hai số nguyên a, b/);
   assert.match(a.outputFormat, /tổng a \+ b/);
   assert.match(a.constraints, /10\^9/);
-  assert.deepEqual(a.samples, [
-    { input: '1 2\n', expectedOutput: '3\n' },
-    { input: '10 20\n', expectedOutput: '30\n' },
+  assert.deepEqual(a.tests, [
+    { input: '1 2\n', expectedOutput: '3\n', isSample: true, points: 10 },
+    { input: '10 20\n', expectedOutput: '30\n', isSample: true, points: 10 },
   ]);
 
   assert.equal(b.title, 'Dãy con');
@@ -54,7 +54,7 @@ test('splits a Vietnamese exam into problems with sections, limits and table sam
   assert.equal(b.timeLimitMs, 2000);
   assert.equal(b.memoryLimitMb, 512);
   assert.match(b.inputFormat, /n và K/);
-  assert.deepEqual(b.samples, [{ input: '3 3\n1 2 3\n', expectedOutput: '2\n' }]);
+  assert.deepEqual(b.tests, [{ input: '3 3\n1 2 3\n', expectedOutput: '2\n', isSample: true, points: 10 }]);
   assert.ok(!b.warnings.some((w) => w.includes('ví dụ')));
 });
 
@@ -105,6 +105,6 @@ test('pasted exam text is split into problems like an uploaded file', async () =
   assert.equal(parsed.fileName, 'Nội dung đã dán');
   assert.equal(parsed.parser, 'BASIC');
   assert.deepEqual(parsed.drafts.map((d) => d.title), ['TỔNG HAI SỐ', 'HIỆU']);
-  assert.deepEqual(parsed.drafts[0].samples, [{ input: '1 2\n', expectedOutput: '3\n' }]);
+  assert.deepEqual(parsed.drafts[0].tests, [{ input: '1 2\n', expectedOutput: '3\n', isSample: true, points: 10 }]);
   await assert.rejects(service.parseText('  \n '), /Hãy dán nội dung đề/);
 });

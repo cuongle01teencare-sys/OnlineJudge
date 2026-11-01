@@ -1,10 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { hasFileIo, ioSideOf, toStandardIo } from '@oj/contracts';
 import type {
   Paginated,
+  ProblemSectionSuggestionDto,
   ProblemDetailDto,
   ProblemSummaryDto,
   SharingDto,
   SolutionDto,
+  SuggestDraftTestsRequest,
+  SuggestProblemSectionRequest,
   SuggestTestCasesRequest,
   TestCaseDto,
   TestCaseSuggestionsDto,
@@ -18,7 +22,7 @@ import { DomainError } from '../../../shared/domain/domain-error.js';
 import { Problem, ResourceLimits, Sharing, Solution } from '../domain/problem.js';
 import { ProblemQueries, ProblemRepository, type ProblemListFilter } from '../domain/problem.repository.js';
 import { toDetailDto, toSummaryDto, toTestCaseDto } from './problem.mapper.js';
-import { TestCaseSuggester } from './ports.js';
+import { ProblemSectionWriter, TestCaseSuggester, type TestSuggestionContext } from './ports.js';
 
 /** Application service for problem blueprints in teachers' banks. */
 @Injectable()
@@ -30,6 +34,7 @@ export class ProblemService {
     private readonly queries: ProblemQueries,
     private readonly events: EventPublisher,
     private readonly suggester: TestCaseSuggester,
+    private readonly writer: ProblemSectionWriter,
   ) {}
 
   // ---------- Queries ----------
@@ -50,18 +55,22 @@ export class ProblemService {
 
   // ---------- Commands ----------
 
-  async create(actor: Actor, input: UpsertProblemRequest): Promise<ProblemDetailDto> {
-    const problem = Problem.create(await this.problems.nextSeq(), owner(actor), input, limitsOf(input));
-    await this.problems.save(problem);
+  /** A new problem, optionally with its whole test list (examples are tests marked `isSample`). */
+  async create(actor: Actor, input: UpsertProblemRequest, tests: UpsertTestCaseRequest[] = []): Promise<ProblemDetailDto> {
+    const problem = await this.newProblem(actor, input, tests);
     return toDetailDto(problem, actor);
   }
 
-  /** Creates a problem together with its (sample) test cases, used by the importer. */
+  /** Same as `create`, for the importer. */
   async createWithTests(actor: Actor, input: UpsertProblemRequest, tests: UpsertTestCaseRequest[]): Promise<string> {
+    return (await this.newProblem(actor, input, tests)).id;
+  }
+
+  private async newProblem(actor: Actor, input: UpsertProblemRequest, tests: UpsertTestCaseRequest[]): Promise<Problem> {
     const problem = Problem.create(await this.problems.nextSeq(), owner(actor), input, limitsOf(input));
     tests.forEach((t) => problem.addTestCase(t));
     await this.problems.save(problem);
-    return problem.id;
+    return problem;
   }
 
   async update(actor: Actor, id: string, input: UpsertProblemRequest): Promise<ProblemDetailDto> {
@@ -118,29 +127,50 @@ export class ProblemService {
     await this.problems.save(problem);
   }
 
-  /** AI-proposed tests for the editor to review; nothing is saved. */
+  /** AI-proposed tests for a saved problem (its solution helps); nothing is saved. */
   async suggestTestCases(actor: Actor, problemId: string, input: SuggestTestCasesRequest): Promise<TestCaseSuggestionsDto> {
     const problem = await this.loadEditable(actor, problemId);
+    const { content, limits, solution } = problem;
+    return this.suggestTests(
+      { ...content, ...limits, solution: solution && { language: solution.language, code: solution.code, explanation: solution.explanation } },
+      problem.testCases.map((t) => ({ input: t.data.input, expectedOutput: t.data.expectedOutput })),
+      input,
+    );
+  }
+
+  /** AI-proposed tests for a problem still being written (creating, importing); nothing is saved. */
+  async suggestDraftTests(input: SuggestDraftTestsRequest): Promise<TestCaseSuggestionsDto> {
+    const { timeLimitMs, memoryLimitMb, ...content } = input.problem;
+    const limits = ResourceLimits.default;
+    return this.suggestTests(
+      { ...content, timeLimitMs: timeLimitMs ?? limits.timeLimitMs, memoryLimitMb: memoryLimitMb ?? limits.memoryLimitMb, solution: null },
+      input.tests,
+      input,
+    );
+  }
+
+  private async suggestTests(
+    problem: Omit<TestSuggestionContext, 'existingTests' | 'count' | 'focus'>,
+    existing: { input: string; expectedOutput: string }[],
+    input: SuggestTestCasesRequest,
+  ): Promise<TestCaseSuggestionsDto> {
     if (!this.suggester.available) {
       throw DomainError.validation('catalog.ai_unavailable', 'Máy chủ chưa cấu hình AI nên chưa gợi ý test được.');
     }
-    const { content, limits, solution } = problem;
     let result: TestCaseSuggestionsDto;
     try {
       result = await this.suggester.suggest({
-        ...content,
-        ...limits,
-        existingTests: problem.testCases.slice(0, MAX_SHOWN_TESTS).map((t) => ({ input: t.data.input, expectedOutput: t.data.expectedOutput })),
-        solution: solution && { language: solution.language, code: solution.code, explanation: solution.explanation },
+        ...problem,
+        existingTests: existing.slice(0, MAX_SHOWN_TESTS),
         count: input.count ?? 5,
         focus: input.focus?.trim() || null,
       });
     } catch (error) {
-      this.logger.warn(`Test suggestions failed for ${problem.code}: ${(error as Error).message}`);
+      this.logger.warn(`Test suggestions failed for "${problem.title}": ${(error as Error).message}`);
       throw DomainError.validation('catalog.ai_failed', 'AI chưa gợi ý được test lúc này. Hãy thử lại sau ít phút.');
     }
     // Drop suggestions whose input the problem (or an earlier suggestion) already has.
-    const seen = new Set(problem.testCases.map((t) => sameInput(t.data.input)));
+    const seen = new Set(existing.map((t) => sameInput(t.input)));
     const suggestions = result.suggestions.filter((s) => {
       const key = sameInput(s.input);
       if (seen.has(key)) return false;
@@ -148,6 +178,33 @@ export class ProblemService {
       return true;
     });
     return { ...result, suggestions };
+  }
+
+  /**
+   * AI rewrite of one text section of a problem being written (possibly not saved yet); nothing is saved.
+   * Text sections never come back with file input/output; without an API key only that rewrite is offered.
+   */
+  async suggestSection(input: SuggestProblemSectionRequest): Promise<ProblemSectionSuggestionDto> {
+    const { section, problem } = input;
+    const side = ioSideOf(section);
+    const current = problem[section];
+    // Without AI, the one fix we can still offer is standard input/output.
+    const ruleBased = (): ProblemSectionSuggestionDto => ({
+      text: toStandardIo(current, side),
+      notes: ['Máy chủ chưa dùng được AI nên chỉ chuyển phần đọc/ghi file sang nhập/xuất chuẩn.'],
+    });
+    if (!this.writer.available) {
+      if (hasFileIo(current, side)) return ruleBased();
+      throw aiUnavailable();
+    }
+    try {
+      const { text, notes } = await this.writer.write(section, problem);
+      return { text: hasFileIo(text, side) ? toStandardIo(text, side) : text, notes };
+    } catch (error) {
+      this.logger.warn(`Section rewrite (${section}) failed: ${(error as Error).message}`);
+      if (hasFileIo(current, side)) return ruleBased();
+      throw aiFailed();
+    }
   }
 
   async setSolution(actor: Actor, problemId: string, input: UpsertSolutionRequest): Promise<SolutionDto> {
@@ -179,6 +236,8 @@ export class ProblemService {
 }
 
 const MAX_SHOWN_TESTS = 10;
+const aiUnavailable = () => DomainError.validation('catalog.ai_unavailable', 'Máy chủ chưa cấu hình AI nên chưa gợi ý được.');
+const aiFailed = () => DomainError.validation('catalog.ai_failed', 'AI chưa gợi ý được lúc này. Hãy thử lại sau ít phút.');
 const sameInput = (s: string) => s.trim().split(/\s+/).join(' ');
 const owner = (actor: Actor) => ({ id: actor.id, name: actor.name });
 const limitsOf = (input: UpsertProblemRequest) => ResourceLimits.of(input.timeLimitMs, input.memoryLimitMb);

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { TestCaseSuggestionsDto } from '@oj/contracts';
 import type { Actor } from '../src/shared/application/actor.js';
-import { TestCaseSuggester, type TestSuggestionContext } from '../src/modules/catalog/application/ports.js';
+import { ProblemSectionWriter, TestCaseSuggester, type TestSuggestionContext, type TextSection } from '../src/modules/catalog/application/ports.js';
 import { ProblemService } from '../src/modules/catalog/application/problem.service.js';
 import { Problem, ResourceLimits } from '../src/modules/catalog/domain/problem.js';
 import type { ProblemQueries, ProblemRepository } from '../src/modules/catalog/domain/problem.repository.js';
@@ -32,9 +32,19 @@ class FakeSuggester extends TestCaseSuggester {
   }
 }
 
-function service(problem: Problem, suggester: TestCaseSuggester) {
+class FakeWriter extends ProblemSectionWriter {
+  constructor(private readonly result: { text: string; notes: string[] } | Error, readonly available = true) {
+    super();
+  }
+  async write(_section: TextSection) {
+    if (this.result instanceof Error) throw this.result;
+    return this.result;
+  }
+}
+
+function service(problem: Problem, suggester: TestCaseSuggester, writer: ProblemSectionWriter = new FakeWriter(new Error('unused'))) {
   const repo = { findById: async (id: string) => (id === problem.id ? problem : null) } as unknown as ProblemRepository;
-  return new ProblemService(repo, {} as ProblemQueries, {} as EventPublisher, suggester);
+  return new ProblemService(repo, {} as ProblemQueries, {} as EventPublisher, suggester, writer);
 }
 
 const suggestion = (input: string, expectedOutput: string) => ({ input, expectedOutput, purpose: 'x', outputVerified: true });
@@ -65,4 +75,48 @@ test('an AI failure becomes a friendly error', async () => {
     service(problem, new FakeSuggester(new Error('overloaded'))).suggestTestCases(teacher, problem.id, {}),
     /AI chưa gợi ý được test/,
   );
+});
+
+const draft = {
+  title: 'Tổng', statement: 'Tính a + b.', inputFormat: 'Đọc từ file TONG.INP hai số a, b.', outputFormat: 'In ra a + b.', constraints: '',
+  samples: [{ input: '1 2\n', expectedOutput: '3\n' }],
+};
+
+test('a section rewrite never brings file input/output back', async () => {
+  const s = service(sumProblem(), new FakeSuggester(new Error('unused')), new FakeWriter({ text: 'Dữ liệu vào từ file A.INP gồm a, b.', notes: [] }));
+  const result = await s.suggestSection({ section: 'inputFormat', problem: draft });
+  assert.equal(result.text, 'Dữ liệu vào từ đầu vào chuẩn gồm a, b.');
+});
+
+test('without AI only the file rewrite is offered', async () => {
+  const s = service(sumProblem(), new FakeSuggester(new Error('unused'), false), new FakeWriter(new Error('unused'), false));
+  const fix = await s.suggestSection({ section: 'inputFormat', problem: draft });
+  assert.equal(fix.text, 'Đọc từ đầu vào chuẩn hai số a, b.');
+  assert.match(fix.notes[0], /chưa dùng được AI/);
+  await assert.rejects(s.suggestSection({ section: 'outputFormat', problem: draft }), /chưa cấu hình AI/);
+});
+
+test('tests can be suggested before the problem is saved', async () => {
+  const fake = new FakeSuggester({ suggestions: [suggestion('1  2', '3\n'), suggestion('2 3\n', '5\n')], notes: [] });
+  const s = service(sumProblem(), fake);
+  const result = await s.suggestDraftTests({ problem: draft, tests: [{ input: '1 2\n', expectedOutput: '3\n' }], count: 3 });
+  assert.deepEqual(result.suggestions.map((t) => t.input), ['2 3\n'], 'the test the editor already has is dropped');
+  assert.equal(fake.seen?.count, 3);
+  assert.equal(fake.seen?.timeLimitMs, 1000);
+  assert.equal(fake.seen?.solution, null);
+  await assert.rejects(service(sumProblem(), new FakeSuggester(new Error('x'), false)).suggestDraftTests({ problem: draft, tests: [] }),
+    /chưa cấu hình AI/);
+});
+
+test('a new problem is saved together with its tests', async () => {
+  const saved: Problem[] = [];
+  const repo = { nextSeq: async () => 7, save: async (p: Problem) => void saved.push(p) } as unknown as ProblemRepository;
+  const s = new ProblemService(repo, {} as ProblemQueries, {} as EventPublisher, new FakeSuggester(new Error('x')), new FakeWriter(new Error('x')));
+  const content = { title: 'Tổng', difficulty: 'EASY' as const, tags: [], statement: 'Tính a + b.', inputFormat: 'a, b', outputFormat: 'a + b', constraints: '', timeLimitMs: 1000, memoryLimitMb: 256 };
+  const dto = await s.create(teacher, content, [
+    { input: '1 2\n', expectedOutput: '3\n', isSample: true, points: 10 },
+    { input: '5 5\n', expectedOutput: '10\n', isSample: false, points: 20 },
+  ]);
+  assert.equal(saved.length, 1, 'one save for the problem and all its tests');
+  assert.deepEqual(dto.testCases.map((t) => [t.isSample, t.points]), [[true, 10], [false, 20]]);
 });

@@ -16,16 +16,19 @@ import {
   FileText,
   ClipboardPaste,
   FileUp,
-  Plus,
   Sparkles,
-  Trash2,
   Upload,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Container } from '@/components/app-shell';
-import { FileIoBlocker, ProblemTextField } from '@/components/admin/problem-text-field';
-import { IoTextarea } from '@/components/form-fields';
+import {
+  FileIoBlocker,
+  ProblemTextField,
+  SuggestionSwitch,
+  useSectionSuggestions,
+} from '@/components/admin/problem-text-field';
+import { TestListEditor } from '@/components/admin/test-list-editor';
 import { RequireRole, STAFF } from '@/components/guards';
 import { useToast } from '@/components/toast';
 import { Badge, Button, Card, Field, InlineAlert, inputClass, LinkButton, PageHeader, Spinner } from '@/components/ui';
@@ -166,6 +169,13 @@ function DraftCard({
   d: DraftState;
   update: (patch: Partial<DraftState>) => void;
 }) {
+  const samples = d.tests.filter((t) => t.isSample);
+  const suggestions = useSectionSuggestions({ ...d, samples }, (patch) => update(patch), [
+    'statement',
+    'inputFormat',
+    'outputFormat',
+    'constraints',
+  ]);
   return (
     <Card className={cn('overflow-hidden', !d.include && 'opacity-60')}>
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
@@ -204,6 +214,12 @@ function DraftCard({
           {d.open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           {d.open ? 'Thu gọn' : 'Chỉnh sửa chi tiết'}
         </button>
+        <SuggestionSwitch
+          label={`Dùng gợi ý của AI cho tất cả các mục của bài ${index + 1}`}
+          text="Dùng gợi ý cho cả bài"
+          suggestion={suggestions.all}
+          className="ml-auto"
+        />
       </div>
 
       {d.include && fileIoFields(d).length > 0 && (
@@ -232,7 +248,7 @@ function DraftCard({
         <div className="px-4 py-3 text-sm text-slate-600">
           <p className="line-clamp-2">{d.statement || <i className="text-slate-400">(chưa có nội dung đề)</i>}</p>
           <p className="mt-1 text-xs text-slate-500">
-            {d.timeLimitMs} ms, {d.memoryLimitMb} MB, {d.samples.length} ví dụ
+            {d.timeLimitMs} ms, {d.memoryLimitMb} MB, {d.tests.length} test ({samples.length} ví dụ)
           </p>
         </div>
       ) : (
@@ -255,59 +271,30 @@ function DraftCard({
               />
             </Field>
           </div>
-          <ProblemTextField field="statement" value={d.statement} onChange={(statement) => update({ statement })} rows={10} />
-          <ProblemTextField field="inputFormat" value={d.inputFormat} onChange={(inputFormat) => update({ inputFormat })} rows={3} />
-          <ProblemTextField field="outputFormat" value={d.outputFormat} onChange={(outputFormat) => update({ outputFormat })} rows={3} />
-          <ProblemTextField field="constraints" value={d.constraints} onChange={(constraints) => update({ constraints })} rows={3} />
+          {(
+            [
+              ['statement', 10],
+              ['inputFormat', 3],
+              ['outputFormat', 3],
+              ['constraints', 3],
+            ] as const
+          ).map(([field, rows]) => (
+            <ProblemTextField
+              key={field}
+              field={field}
+              value={d[field]}
+              onChange={(text) => update({ [field]: text })}
+              rows={rows}
+              suggestion={suggestions.of(field)}
+            />
+          ))}
 
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-700">Ví dụ ({d.samples.length})</span>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => update({ samples: [...d.samples, { input: '', expectedOutput: '' }] })}
-              >
-                <Plus className="h-4 w-4" />
-                Thêm ví dụ
-              </Button>
-            </div>
-            <div className="space-y-3">
-              {d.samples.map((s, i) => (
-                <div key={i} className="rounded-lg border border-slate-200 p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500">Ví dụ {i + 1}</span>
-                    <button
-                      type="button"
-                      onClick={() => update({ samples: d.samples.filter((_, j) => j !== i) })}
-                      className="text-mark-500 hover:text-mark-700"
-                      aria-label="Xóa ví dụ"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <IoTextarea
-                      label="Input"
-                      rows={4}
-                      value={s.input}
-                      onChange={(input) =>
-                        update({ samples: d.samples.map((x, j) => (j === i ? { ...x, input } : x)) })
-                      }
-                    />
-                    <IoTextarea
-                      label="Output"
-                      rows={4}
-                      value={s.expectedOutput}
-                      onChange={(expectedOutput) =>
-                        update({ samples: d.samples.map((x, j) => (j === i ? { ...x, expectedOutput } : x)) })
-                      }
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <TestListEditor
+            className="shadow-none"
+            tests={d.tests}
+            onChange={(tests) => update({ tests })}
+            suggest={(request) => api.suggestDraftTests({ ...request, problem: { ...d, samples }, tests: d.tests })}
+          />
         </div>
       )}
     </Card>
@@ -405,17 +392,15 @@ export default function ImportPage() {
               <CheckCircle2 className="h-6 w-6" />
               <h2 className="text-lg font-semibold">Đã nhập {created.length} bài vào ngân hàng của bạn</h2>
             </div>
-            <p className="mb-3 text-sm text-slate-600">
-              Các ví dụ đã được tạo thành test ví dụ. Hãy bổ sung thêm test chấm và lời giải cho từng bài:
-            </p>
+            <p className="mb-3 text-sm text-slate-600">Bộ test đã được lưu cùng từng bài. Bạn có thể thêm lời giải cho từng bài:</p>
             <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
               {created.map((c) => (
                 <li key={c.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <Link href={`/bank/problems/${c.id}`} className="font-medium text-slate-800 hover:text-ink-600">
                     {c.title}
                   </Link>
-                  <Link href={`/bank/problems/${c.id}?tab=tests`} className="text-sm text-ink-600 hover:underline">
-                    Thêm test và lời giải
+                  <Link href={`/bank/problems/${c.id}?tab=solution`} className="text-sm text-ink-600 hover:underline">
+                    Thêm lời giải
                   </Link>
                 </li>
               ))}
@@ -486,7 +471,7 @@ export default function ImportPage() {
               </p>
             )}
             <InlineAlert kind="info">
-              Hãy kiểm tra tên bài, <b>chọn độ khó</b>, giới hạn và các ví dụ trước khi nhập. Những cảnh báo màu vàng cần được xem lại.
+              Hãy kiểm tra tên bài, <b>chọn độ khó</b>, giới hạn và bộ test (test nào <b>là ví dụ</b>) trước khi nhập. Những cảnh báo màu vàng cần được xem lại.
             </InlineAlert>
 
             {drafts.map((d, i) => (
@@ -521,7 +506,9 @@ export default function ImportPage() {
                   .filter((p) => p.include)}
               />
               <div className="flex items-center justify-end gap-3">
-                <span className="text-sm text-slate-500">{included.length} bài sẽ được thêm vào ngân hàng của bạn</span>
+                <span className="text-sm text-slate-500">
+                  {included.length} bài, {included.reduce((n, d) => n + d.tests.length, 0)} test sẽ được thêm vào ngân hàng của bạn
+                </span>
                 <Button onClick={confirm} loading={importing} disabled={included.length === 0 || blocked}>
                   Nhập {included.length} bài
                 </Button>

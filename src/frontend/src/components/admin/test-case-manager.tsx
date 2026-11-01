@@ -2,7 +2,7 @@
 
 import type { TestCaseDto, UpsertTestCaseRequest } from '@oj/contracts';
 import { ChevronDown, ChevronRight, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { IoTextarea } from '../form-fields';
@@ -33,6 +33,9 @@ export function TestCaseManager({
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [suggesting, setSuggesting] = useState(false);
+  // The list as it grows while the AI dialog adds tests one by one.
+  const added = useRef(testCases);
+  added.current = testCases;
 
   const sorted = [...testCases].sort((a, b) => a.order - b.order);
   const totalPoints = sorted.reduce((s, t) => s + (t.points || 0), 0);
@@ -237,8 +240,12 @@ export function TestCaseManager({
       <SuggestTestsDialog
         open={suggesting}
         onClose={() => setSuggesting(false)}
-        problemId={problemId}
-        onAdded={(added) => onChange([...testCases, ...added])}
+        suggest={(request) => api.suggestTestCases(problemId, request)}
+        addTest={async (test) => {
+          const tc = await api.createTestCase(problemId, test);
+          added.current = [...added.current, tc];
+          onChange(added.current);
+        }}
       />
 
       <ConfirmDialog

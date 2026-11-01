@@ -1,4 +1,4 @@
-import { Difficulties, Languages, type BankScope, type Difficulty, type Language } from '@oj/contracts';
+import { Difficulties, Languages, type BankScope, type Difficulty, type Language, type SuggestProblemSectionRequest } from '@oj/contracts';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -13,6 +13,7 @@ import {
   MaxLength,
   Min,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import { PaginationQuery } from '../../../shared/presentation/pagination.dto.js';
 
@@ -42,9 +43,45 @@ export class UpsertTestCaseBody {
   @Type(() => Number) @IsNumber() @Min(0) points: number;
 }
 
+export class CreateProblemBody extends UpsertProblemBody {
+  @IsOptional() @IsArray() @ArrayMaxSize(200, { message: 'Tối đa 200 test.' })
+  @ValidateNested({ each: true }) @Type(() => UpsertTestCaseBody)
+  testCases?: UpsertTestCaseBody[];
+}
+
 export class SuggestTestCasesBody {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10, { message: 'Mỗi lần gợi ý tối đa 10 test.' }) count?: number;
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(300) focus?: string | null;
+}
+
+class DraftSampleBody {
+  @IsString() @MaxLength(20_000) input: string;
+  @IsString() @MaxLength(20_000) expectedOutput: string;
+}
+
+class DraftContentBody {
+  @IsString() @MaxLength(200) title: string;
+  @IsString() @MaxLength(100_000) statement: string;
+  @IsString() @MaxLength(20_000) inputFormat: string;
+  @IsString() @MaxLength(20_000) outputFormat: string;
+  @IsString() @MaxLength(20_000) constraints: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(10) @ValidateNested({ each: true }) @Type(() => DraftSampleBody)
+  samples?: DraftSampleBody[];
+}
+
+export class SuggestSectionBody {
+  @IsIn(['statement', 'inputFormat', 'outputFormat', 'constraints']) section: SuggestProblemSectionRequest['section'];
+  @ValidateNested() @Type(() => DraftContentBody) problem: DraftContentBody;
+}
+
+class DraftWithLimitsBody extends DraftContentBody {
+  @IsOptional() @Type(() => Number) @IsInt() timeLimitMs?: number;
+  @IsOptional() @Type(() => Number) @IsInt() memoryLimitMb?: number;
+}
+
+export class SuggestDraftTestsBody extends SuggestTestCasesBody {
+  @ValidateNested() @Type(() => DraftWithLimitsBody) problem: DraftWithLimitsBody;
+  @IsArray() @ArrayMaxSize(200) @ValidateNested({ each: true }) @Type(() => DraftSampleBody) tests: DraftSampleBody[];
 }
 
 export class SharingBody {

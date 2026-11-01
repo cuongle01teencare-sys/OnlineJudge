@@ -3,8 +3,11 @@ import type { Actor } from '../../../shared/application/actor.js';
 import { CurrentActor, Roles } from '../../../shared/presentation/decorators.js';
 import { ProblemService } from '../application/problem.service.js';
 import {
+  CreateProblemBody,
   ProblemListQuery,
   SharingBody,
+  SuggestDraftTestsBody,
+  SuggestSectionBody,
   SuggestTestCasesBody,
   UpsertProblemBody,
   UpsertSolutionBody,
@@ -22,14 +25,26 @@ export class ProblemsController {
     return this.problems.list(actor, { ...query, scope: query.scope ?? 'mine' });
   }
 
+  /** AI rewrite of one section of the problem being written (saved or not); nothing is saved. */
+  @Post('suggest-section') @HttpCode(200)
+  suggestSection(@Body() body: SuggestSectionBody) {
+    return this.problems.suggestSection(body);
+  }
+
+  /** AI test suggestions for a problem not saved yet; nothing is saved. */
+  @Post('suggest-tests') @HttpCode(200)
+  suggestDraftTests(@Body() body: SuggestDraftTestsBody) {
+    return this.problems.suggestDraftTests(body);
+  }
+
   @Get(':id')
   get(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
     return this.problems.get(actor, id);
   }
 
   @Post()
-  create(@CurrentActor() actor: Actor, @Body() body: UpsertProblemBody) {
-    return this.problems.create(actor, body);
+  create(@CurrentActor() actor: Actor, @Body() { testCases, ...problem }: CreateProblemBody) {
+    return this.problems.create(actor, problem, testCases);
   }
 
   @Put(':id')

@@ -21,7 +21,7 @@ import { api, errorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useAsync } from '@/lib/use-async';
 
-type Tab = 'statement' | 'info' | 'tests' | 'solution';
+type Tab = 'statement' | 'info' | 'solution';
 
 /** Someone else's public problem: read-only view and "save to my bank". */
 function PublicProblemView({ p }: { p: ProblemDetailDto }) {
@@ -39,7 +39,7 @@ function PublicProblemView({ p }: { p: ProblemDetailDto }) {
     try {
       const c = await api.copyProblem(p.id);
       toast.success(`Đã lưu vào ngân hàng của bạn với mã ${c.code}`);
-      router.push(`/bank/problems/${c.id}${p.sharing.publicTests ? '' : '?tab=tests'}`);
+      router.push(`/bank/problems/${c.id}${p.sharing.publicTests ? '' : '#tests'}`);
     } catch (e) {
       toast.error(errorMessage(e));
       setCopying(false);
@@ -97,8 +97,9 @@ function ProblemPage() {
   const router = useRouter();
   const toast = useToast();
   const { isAdmin } = useAuth();
+  // Old links used ?tab=tests; the tests now sit under the statement on the "info" tab.
   const initialTab = (params.get('tab') as Tab) || 'info';
-  const [tab, setTab] = useState<Tab>(['statement', 'info', 'tests', 'solution'].includes(initialTab) ? initialTab : 'info');
+  const [tab, setTab] = useState<Tab>(['statement', 'info', 'solution'].includes(initialTab) ? initialTab : 'info');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [assigning, setAssigning] = useState(false);
@@ -180,9 +181,8 @@ function ProblemPage() {
         value={tab}
         onChange={setTab}
         tabs={[
-          { value: 'info', label: 'Sửa đề bài' },
+          { value: 'info', label: `Đề bài & bộ test (${data.testCases.length})` },
           { value: 'statement', label: 'Xem như học sinh' },
-          { value: 'tests', label: `Test (${data.testCases.length})` },
           { value: 'solution', label: data.solution ? 'Lời giải ✓' : 'Lời giải' },
         ]}
       />
@@ -214,12 +214,14 @@ function ProblemPage() {
           }}
         />
       )}
-      {tab === 'tests' && (
-        <TestCaseManager
-          problemId={id}
-          testCases={data.testCases}
-          onChange={(testCases) => setData((prev) => ({ ...(prev as ProblemDetailDto), testCases, testCaseCount: testCases.length }))}
-        />
+      {tab === 'info' && (
+        <div id="tests" className="mt-6 scroll-mt-20">
+          <TestCaseManager
+            problemId={id}
+            testCases={data.testCases}
+            onChange={(testCases) => setData((prev) => ({ ...(prev as ProblemDetailDto), testCases, testCaseCount: testCases.length }))}
+          />
+        </div>
       )}
       {tab === 'solution' && (
         <SolutionEditor

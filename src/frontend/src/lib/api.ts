@@ -1,4 +1,5 @@
 import type {
+  CreateProblemRequest,
   AcceptInvitationRequest,
   AddStudentRequest,
   AnswerKeyDto,
@@ -45,6 +46,9 @@ import type {
   SubmissionDetailDto,
   SubmissionDto,
   SubmitRequest,
+  ProblemSectionSuggestionDto,
+  SuggestDraftTestsRequest,
+  SuggestProblemSectionRequest,
   SuggestTestCasesRequest,
   TestCaseDto,
   TestCaseSuggestionsDto,
@@ -246,7 +250,7 @@ export const api = {
   listProblems: (q: ProblemQuery = {}) =>
     request<Paginated<ProblemSummaryDto>>('GET', '/problems', { query: { ...q } }),
   getProblem: (id: string) => request<ProblemDetailDto>('GET', `/problems/${id}`),
-  createProblem: (body: UpsertProblemRequest) => request<ProblemDetailDto>('POST', '/problems', { body }),
+  createProblem: (body: CreateProblemRequest) => request<ProblemDetailDto>('POST', '/problems', { body }),
   updateProblem: (id: string, body: UpsertProblemRequest) =>
     request<ProblemDetailDto>('PUT', `/problems/${id}`, { body }),
   deleteProblem: (id: string) => request<void>('DELETE', `/problems/${id}`),
@@ -257,6 +261,10 @@ export const api = {
     request<TestCaseDto>('POST', `/problems/${problemId}/test-cases`, { body }),
   updateTestCase: (problemId: string, testCaseId: string, body: UpsertTestCaseRequest) =>
     request<TestCaseDto>('PUT', `/problems/${problemId}/test-cases/${testCaseId}`, { body }),
+  suggestDraftTests: (body: SuggestDraftTestsRequest) =>
+    request<TestCaseSuggestionsDto>('POST', '/problems/suggest-tests', { body }),
+  suggestProblemSection: (body: SuggestProblemSectionRequest) =>
+    request<ProblemSectionSuggestionDto>('POST', '/problems/suggest-section', { body }),
   suggestTestCases: (problemId: string, body: SuggestTestCasesRequest) =>
     request<TestCaseSuggestionsDto>('POST', `/problems/${problemId}/test-cases/suggest`, { body }),
   deleteTestCase: (problemId: string, testCaseId: string) =>

@@ -302,6 +302,41 @@ export interface TestCaseSuggestionsDto {
   notes: string[];
 }
 
+/** The problem as currently typed (it may not be saved yet): context for a section suggestion. */
+export interface ProblemDraftContent {
+  title: string;
+  statement: string;
+  inputFormat: string;
+  outputFormat: string;
+  constraints: string;
+  /** The examples shown in the statement. */
+  samples?: { input: string; expectedOutput: string }[];
+}
+
+/** Ask the AI to (re)write one text section of a problem being written. */
+export interface SuggestProblemSectionRequest {
+  section: 'statement' | 'inputFormat' | 'outputFormat' | 'constraints';
+  problem: ProblemDraftContent;
+}
+
+export interface ProblemSectionSuggestionDto {
+  text: string;
+  /** What the teacher should check. */
+  notes: string[];
+}
+
+/** AI test suggestions for a problem that is not saved yet (creating, importing). */
+export interface SuggestDraftTestsRequest extends SuggestTestCasesRequest {
+  problem: ProblemDraftContent & { timeLimitMs?: number; memoryLimitMb?: number };
+  /** The tests the editor already has. */
+  tests: { input: string; expectedOutput: string }[];
+}
+
+/** A new problem may come with its whole test list (examples are tests with `isSample`). */
+export interface CreateProblemRequest extends UpsertProblemRequest {
+  testCases?: UpsertTestCaseRequest[];
+}
+
 export interface UpsertSolutionRequest {
   explanation: string;
   language: Language | null;
@@ -325,7 +360,8 @@ export interface ProblemDraftDto {
   constraints: string;
   timeLimitMs: number;
   memoryLimitMb: number;
-  samples: { input: string; expectedOutput: string }[];
+  /** Examples read from the document come as tests with `isSample`; the editor adds more before confirming. */
+  tests: UpsertTestCaseRequest[];
   /** Parser hints the teacher should double-check (e.g. "no sample found"). */
   warnings: string[];
 }

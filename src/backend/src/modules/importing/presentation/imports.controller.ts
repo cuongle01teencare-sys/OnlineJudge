@@ -6,10 +6,13 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
+  IsNumber,
   IsString,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { DomainError } from '../../../shared/domain/domain-error.js';
@@ -17,9 +20,11 @@ import type { Actor } from '../../../shared/application/actor.js';
 import { CurrentActor, Roles } from '../../../shared/presentation/decorators.js';
 import { ImportService } from '../application/import.service.js';
 
-class SampleBody {
+class TestBody {
   @IsString() input: string;
   @IsString() expectedOutput: string;
+  @IsBoolean() isSample: boolean;
+  @Type(() => Number) @IsNumber() @Min(0) points: number;
 }
 
 class DraftBody {
@@ -31,7 +36,7 @@ class DraftBody {
   @IsString() constraints: string;
   @IsInt() timeLimitMs: number;
   @IsInt() memoryLimitMb: number;
-  @IsArray() @ValidateNested({ each: true }) @Type(() => SampleBody) samples: SampleBody[];
+  @IsArray() @ArrayMaxSize(200) @ValidateNested({ each: true }) @Type(() => TestBody) tests: TestBody[];
   @IsArray() @IsString({ each: true }) warnings: string[];
 }
 

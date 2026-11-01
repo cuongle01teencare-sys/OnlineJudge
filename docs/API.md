@@ -96,12 +96,14 @@ Staff only (students reach problems through sessions).
 |---|---|---|---|---|
 | GET | /problems?scope=mine\|public\|all&search=&difficulty=&tag=&page=1&pageSize=20 | staff (`all`: admin) | – | Paginated<ProblemSummaryDto> |
 | GET | /problems/:id | owner, admin, or any staff if public | – | ProblemDetailDto (tests/solution filtered by sharing) |
-| POST | /problems | staff | UpsertProblemRequest | ProblemDetailDto (owned by the caller) |
+| POST | /problems | staff | CreateProblemRequest (UpsertProblemRequest + optional `testCases`, ≤ 200; examples are tests with `isSample`) | ProblemDetailDto (owned by the caller), saved together with its tests |
+| POST | /problems/suggest-tests | staff | SuggestDraftTestsRequest (`problem` as typed, `tests` it already has, `count`, `focus`) | 200 TestCaseSuggestionsDto — AI test suggestions for a problem **not saved yet** (creating, importing); same as `/problems/:id/test-cases/suggest` without the stored solution |
 | PUT | /problems/:id | owner or admin | UpsertProblemRequest | ProblemDetailDto |
 | DELETE | /problems/:id | owner or admin | – | 204 (removed from the owner's sets; running sessions keep their frozen copy) |
 | PUT | /problems/:id/sharing | owner or admin | SharingDto | ProblemDetailDto |
 | POST | /problems/:id/copy | staff, problem public (or admin) | – | ProblemDetailDto — copy in the caller's bank (hidden tests / solution only if shared) |
 | POST | /problems/:id/test-cases | owner or admin | UpsertTestCaseRequest | TestCaseDto |
+| POST | /problems/suggest-section | staff | SuggestProblemSectionRequest (`section`: statement, inputFormat, outputFormat or constraints; `problem`: the content as typed, saved or not) | 200 ProblemSectionSuggestionDto — AI rewrite of that section, **not saved** (the "Dùng gợi ý" switches). Text never comes back with file input/output. Without an API key only the file-to-standard-I/O rewrite of a text section is offered; otherwise 400 `catalog.ai_unavailable` |
 | POST | /problems/:id/test-cases/suggest | owner or admin | SuggestTestCasesRequest (`count` 1–10, default 5; optional `focus`) | 200 TestCaseSuggestionsDto — AI-proposed tests, **not saved**; the editor adds the ones they keep with POST /problems/:id/test-cases. Claude computes outputs by running code (`outputVerified`). Inputs the problem already has are dropped. 400 `catalog.ai_unavailable` without ANTHROPIC_API_KEY, `catalog.ai_failed` when the AI call fails. Takes 30 s – 2 min |
 | PUT | /problems/:id/test-cases/:testCaseId | owner or admin | UpsertTestCaseRequest | TestCaseDto |
 | DELETE | /problems/:id/test-cases/:testCaseId | owner or admin | – | 204 |
@@ -115,7 +117,7 @@ Staff only (students reach problems through sessions).
 |---|---|---|---|---|
 | POST | /imports/parse | staff | multipart/form-data, field `file` (.docx or .pdf, ≤ 10MB) | ParsedExamDto |
 | POST | /imports/parse-text | staff | `{ text }` (≤ 100,000 characters) | ParsedExamDto (`fileName` = "Nội dung đã dán") — the same reading as `parse`, for exam text pasted by the teacher ("Tái cấu trúc bằng AI"). 400 `import.empty_text` |
-| POST | /imports/confirm | staff | ImportProblemsRequest | ImportProblemsResponse (problems owned by the caller). 400 `import.file_io` (nothing imported) when a draft still reads or writes files |
+| POST | /imports/confirm | staff | ImportProblemsRequest (each draft carries its `tests`; examples read from the document arrive as tests with `isSample`) | ImportProblemsResponse (problems owned by the caller, saved with their tests). 400 `import.file_io` (nothing imported) when a draft still reads or writes files |
 
 ## Problem set bank
 | Method | Path | Who | Body | Response |

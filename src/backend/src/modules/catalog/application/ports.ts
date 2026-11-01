@@ -1,4 +1,4 @@
-import type { Language, TestCaseSuggestionsDto } from '@oj/contracts';
+import type { Language, ProblemDraftContent, TestCaseSuggestionsDto } from '@oj/contracts';
 
 /** What the suggester knows about a problem: the statement, its limits, the tests it already has and the solution. */
 export interface TestSuggestionContext {
@@ -19,4 +19,12 @@ export interface TestSuggestionContext {
 export abstract class TestCaseSuggester {
   abstract get available(): boolean;
   abstract suggest(context: TestSuggestionContext): Promise<TestCaseSuggestionsDto>;
+}
+
+export type TextSection = 'statement' | 'inputFormat' | 'outputFormat' | 'constraints';
+
+/** Port: an AI that rewrites one text section of a problem from the rest of it. Optional (needs an API key). */
+export abstract class ProblemSectionWriter {
+  abstract get available(): boolean;
+  abstract write(section: TextSection, problem: ProblemDraftContent): Promise<{ text: string; notes: string[] }>;
 }

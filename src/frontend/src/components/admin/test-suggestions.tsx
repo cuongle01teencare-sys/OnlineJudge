@@ -1,9 +1,14 @@
 'use client';
 
-import type { TestCaseDto, TestCaseSuggestionDto } from '@oj/contracts';
+import type {
+  SuggestTestCasesRequest,
+  TestCaseSuggestionDto,
+  TestCaseSuggestionsDto,
+  UpsertTestCaseRequest,
+} from '@oj/contracts';
 import { ChevronDown, ChevronRight, CircleAlert, CircleCheck, RotateCcw, Sparkles } from 'lucide-react';
 import { useState } from 'react';
-import { api, errorMessage } from '@/lib/api';
+import { errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { IoTextarea } from '../form-fields';
 import { useToast } from '../toast';
@@ -15,22 +20,25 @@ export const FEW_TESTS = 5;
 interface Draft extends TestCaseSuggestionDto {
   picked: boolean;
   open: boolean;
+  /** Shown to students in the statement. */
+  isSample: boolean;
 }
 
 /**
- * Asks the AI for extra tests, lets the editor review and edit them, then adds the picked ones.
+ * Asks the AI for extra tests, lets the editor review and edit them, then adds the picked ones one by one
+ * (`addTest` saves one test of a saved problem, or appends to the list of a problem being written).
  * Nothing reaches the problem until "Thêm".
  */
 export function SuggestTestsDialog({
   open,
   onClose,
-  problemId,
-  onAdded,
+  suggest,
+  addTest,
 }: {
   open: boolean;
   onClose: () => void;
-  problemId: string;
-  onAdded: (added: TestCaseDto[]) => void;
+  suggest: (request: SuggestTestCasesRequest) => Promise<TestCaseSuggestionsDto>;
+  addTest: (test: UpsertTestCaseRequest) => Promise<unknown> | void;
 }) {
   const toast = useToast();
   const [count, setCount] = useState(5);
@@ -54,9 +62,9 @@ export function SuggestTestsDialog({
   const generate = async () => {
     setLoading(true);
     try {
-      const res = await api.suggestTestCases(problemId, { count, focus: focus.trim() || null });
+      const res = await suggest({ count, focus: focus.trim() || null });
       // Tests whose output the AI computed by hand start unticked: the editor should check them first.
-      setDrafts(res.suggestions.map((s) => ({ ...s, picked: s.outputVerified, open: false })));
+      setDrafts(res.suggestions.map((s) => ({ ...s, picked: s.outputVerified, open: false, isSample: false })));
       setNotes(res.notes);
     } catch (e) {
       toast.error(errorMessage(e));
@@ -70,17 +78,11 @@ export function SuggestTestsDialog({
 
   const add = async () => {
     setAdding(true);
-    const added: TestCaseDto[] = [];
+    const added: Draft[] = [];
     try {
       for (const d of picked) {
-        added.push(
-          await api.createTestCase(problemId, {
-            input: d.input,
-            expectedOutput: d.expectedOutput,
-            isSample: false,
-            points: Number(points) || 0,
-          }),
-        );
+        await addTest({ input: d.input, expectedOutput: d.expectedOutput, isSample: d.isSample, points: Number(points) || 0 });
+        added.push(d);
       }
       toast.success(`Đã thêm ${added.length} test`);
       setDrafts(null);
@@ -89,9 +91,8 @@ export function SuggestTestsDialog({
     } catch (e) {
       toast.error(added.length ? `Đã thêm ${added.length} test, rồi gặp lỗi: ${errorMessage(e)}` : errorMessage(e));
       // Keep only what was not added yet, so a retry does not duplicate.
-      setDrafts((ds) => ds && ds.filter((d) => !d.picked || !added.some((a) => a.input === d.input)));
+      setDrafts((ds) => ds && ds.filter((d) => !added.includes(d)));
     } finally {
-      if (added.length) onAdded(added);
       setAdding(false);
     }
   };
@@ -225,6 +226,10 @@ export function SuggestTestsDialog({
                         </span>
                         <span className="mt-0.5 block text-slate-600">{d.purpose}</span>
                       </button>
+                      <label className="mt-0.5 flex shrink-0 items-center gap-1 text-xs text-slate-600">
+                        <input type="checkbox" checked={d.isSample} onChange={(e) => update(i, { isSample: e.target.checked })} />
+                        Là ví dụ
+                      </label>
                     </div>
                     {d.open && (
                       <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2">

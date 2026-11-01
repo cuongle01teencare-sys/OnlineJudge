@@ -1,11 +1,20 @@
 'use client';
 
-import { Difficulties, DifficultyLabels, fileIoFields, type Difficulty, type UpsertProblemRequest } from '@oj/contracts';
+import {
+  Difficulties,
+  DifficultyLabels,
+  fileIoFields,
+  type Difficulty,
+  type UpsertProblemRequest,
+  type UpsertTestCaseRequest,
+} from '@oj/contracts';
 import { Save } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
+import { api } from '@/lib/api';
 import { TagsInput } from '../form-fields';
 import { Button, Card, Field, InlineAlert, inputClass } from '../ui';
-import { FileIoBlocker, ProblemTextField } from './problem-text-field';
+import { FileIoBlocker, ProblemTextField, SuggestionSwitch, useSectionSuggestions } from './problem-text-field';
+import { TestListEditor } from './test-list-editor';
 
 export const emptyProblem: UpsertProblemRequest = {
   title: '',
@@ -19,22 +28,35 @@ export const emptyProblem: UpsertProblemRequest = {
   memoryLimitMb: 256,
 };
 
+/**
+ * The statement of a problem. When creating (`withTests`), the test list is written here too and saved with
+ * the problem; a saved problem edits its tests separately (each change is saved at once).
+ */
 export function ProblemForm({
   initial,
   onSubmit,
   submitLabel = 'Lưu',
+  withTests = false,
 }: {
   initial: UpsertProblemRequest;
-  onSubmit: (v: UpsertProblemRequest) => Promise<void>;
+  onSubmit: (v: UpsertProblemRequest, tests: UpsertTestCaseRequest[]) => Promise<void>;
   submitLabel?: string;
+  withTests?: boolean;
 }) {
   const [v, setV] = useState<UpsertProblemRequest>(initial);
+  const [tests, setTests] = useState<UpsertTestCaseRequest[]>([]);
+  const samples = tests.filter((t) => t.isSample);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const set = <K extends keyof UpsertProblemRequest>(k: K, val: UpsertProblemRequest[K]) =>
     setV((prev) => ({ ...prev, [k]: val }));
 
   const blocked = fileIoFields(v).length > 0;
+  const suggestions = useSectionSuggestions(
+    { ...v, samples },
+    (patch) => setV((prev) => ({ ...prev, ...(patch as Partial<UpsertProblemRequest>) })),
+    ['statement', 'inputFormat', 'outputFormat', 'constraints'],
+  );
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -44,7 +66,7 @@ export function ProblemForm({
     if (!(v.timeLimitMs > 0) || !(v.memoryLimitMb > 0)) return setError('Giới hạn thời gian/bộ nhớ phải lớn hơn 0.');
     setSaving(true);
     try {
-      await onSubmit({ ...v, title: v.title.trim() });
+      await onSubmit({ ...v, title: v.title.trim() }, tests);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Lỗi khi lưu');
     } finally {
@@ -103,11 +125,41 @@ export function ProblemForm({
       </Card>
 
       <Card className="space-y-5 p-5">
-        <ProblemTextField field="statement" value={v.statement} onChange={(s) => set('statement', s)} rows={12} />
-        <ProblemTextField field="inputFormat" value={v.inputFormat} onChange={(s) => set('inputFormat', s)} rows={4} />
-        <ProblemTextField field="outputFormat" value={v.outputFormat} onChange={(s) => set('outputFormat', s)} rows={4} />
-        <ProblemTextField field="constraints" value={v.constraints} onChange={(s) => set('constraints', s)} rows={3} />
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <h2 className="font-semibold text-slate-800">Nội dung đề</h2>
+          <SuggestionSwitch
+            label="Dùng gợi ý của AI cho tất cả các mục"
+            text="Dùng gợi ý cho cả bài"
+            suggestion={suggestions.all}
+            className="text-sm"
+          />
+        </div>
+        {(
+          [
+            ['statement', 12],
+            ['inputFormat', 4],
+            ['outputFormat', 4],
+            ['constraints', 3],
+          ] as const
+        ).map(([field, rows]) => (
+          <ProblemTextField
+            key={field}
+            field={field}
+            value={v[field]}
+            onChange={(s) => set(field, s)}
+            rows={rows}
+            suggestion={suggestions.of(field)}
+          />
+        ))}
       </Card>
+
+      {withTests && (
+        <TestListEditor
+          tests={tests}
+          onChange={setTests}
+          suggest={(request) => api.suggestDraftTests({ ...request, problem: { ...v, samples }, tests })}
+        />
+      )}
 
       {error && <InlineAlert>{error}</InlineAlert>}
       <div className="sticky bottom-0 z-10 -mx-4 space-y-3 border-t border-slate-200 bg-white/90 px-4 py-3 backdrop-blur">

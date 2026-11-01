@@ -1,6 +1,9 @@
 import type { Difficulty, ProblemDraftDto } from '@oj/contracts';
 import type { DocumentBlock, ExamDocument } from './exam-document.js';
 
+/** Points of an example test read from a document (same default as a test added by hand). */
+export const SAMPLE_POINTS = 10;
+
 /**
  * Domain service: turns an exam document into problem drafts using heuristics that match
  * common Vietnamese/English problem layouts ("Bài 1", "Dữ liệu vào", "Kết quả", "Ví dụ", ...).
@@ -332,7 +335,8 @@ class DraftBuilder {
       constraints: join(this.parts.constraints),
       timeLimitMs: clamp(meta.timeLimitMs ?? 1000, 100, 15_000),
       memoryLimitMb: clamp(meta.memoryLimitMb ?? 256, 16, 1024),
-      samples,
+      // Examples from the document become example tests; the teacher adds the judging tests.
+      tests: samples.map((s) => ({ ...s, isSample: true, points: SAMPLE_POINTS })),
       warnings,
     };
   }

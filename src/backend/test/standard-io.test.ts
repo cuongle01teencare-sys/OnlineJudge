@@ -77,7 +77,7 @@ test('the teacher wording is kept on import; file wording is refused until it is
   const [draft] = (await service.parse({ originalName: 'de.docx', mimeType: '', buffer: Buffer.alloc(0) })).drafts;
   assert.equal(draft.inputFormat, 'Đọc từ file TONG.INP một dòng chứa a, b.');
   assert.equal(draft.outputFormat, 'Ghi ra file TONG.OUT tổng a + b.');
-  assert.deepEqual(draft.samples, [{ input: '1 2\n', expectedOutput: '3\n' }]);
+  assert.deepEqual(draft.tests, [{ input: '1 2\n', expectedOutput: '3\n', isSample: true, points: 10 }]);
   assert.ok(draft.warnings.every((w) => !isAboutFileIo(w)));
 
   const fine = { ...draft, title: 'Bài ổn', inputFormat: 'Một dòng chứa a, b.', outputFormat: 'In ra a + b.' };

@@ -81,7 +81,7 @@ export class ImportService {
             timeLimitMs: draft.timeLimitMs,
             memoryLimitMb: draft.memoryLimitMb,
           },
-          draft.samples.map((s) => ({ input: s.input, expectedOutput: s.expectedOutput, isSample: true, points: 1 })),
+          draft.tests,
         ),
       );
     }
