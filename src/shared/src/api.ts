@@ -752,4 +752,6 @@ export interface ApiErrorBody {
   statusCode: number;
   message: string;
   code?: string;
+  /** Extra data for the client, e.g. `sessionId` of the session that already exists. */
+  details?: Record<string, string>;
 }

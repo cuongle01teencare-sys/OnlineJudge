@@ -13,7 +13,7 @@ import { AlarmClock, Globe2, Search, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { api, errorMessage } from '@/lib/api';
+import { api, ApiError, errorMessage } from '@/lib/api';
 import { DEFAULT_SETTINGS } from '@/lib/exam';
 import { formatRemaining, isClosingSoon, SessionStateLabels, sessionHref } from '@/lib/sessions';
 import { useAsync } from '@/lib/use-async';
@@ -289,6 +289,8 @@ export function CreateSessionDialog({
   const [closesAt, setClosesAt] = useState('');
   const [settings, setSettings] = useState<SessionSettingsDto>(DEFAULT_SETTINGS);
   const [error, setError] = useState<string | null>(null);
+  // The session this problem or set was already given in, when the API refuses to assign it again.
+  const [existingId, setExistingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -299,6 +301,7 @@ export function CreateSessionDialog({
     setOpensAt('');
     setClosesAt('');
     setError(null);
+    setExistingId(null);
     setTarget(defaultClassId ?? '');
   }, [open, defaultTitle, defaultClassId]);
 
@@ -308,8 +311,9 @@ export function CreateSessionDialog({
 
   const submit = async (e?: FormEvent) => {
     e?.preventDefault();
-    if (!source) return;
+    if (!source || saving) return;
     setError(null);
+    setExistingId(null);
     if (!target) return setError('Chọn lớp nhận bài, hoặc chọn "Công khai cho mọi người".');
     const w = checkWindow(opensAt, closesAt);
     if (w) return setError(w);
@@ -329,6 +333,7 @@ export function CreateSessionDialog({
       router.push(sessionHref(s.id));
     } catch (err) {
       setError(errorMessage(err));
+      if (err instanceof ApiError && err.code === 'assessment.already_assigned') setExistingId(err.details?.sessionId ?? null);
     } finally {
       setSaving(false);
     }
@@ -386,7 +391,16 @@ export function CreateSessionDialog({
         <MarkdownField label="Lời dặn (không bắt buộc)" value={description} onChange={setDescription} rows={3} />
         <TimeFields opensAt={opensAt} closesAt={closesAt} setOpensAt={setOpensAt} setClosesAt={setClosesAt} />
         <SessionSettingsFields value={settings} onChange={setSettings} />
-        {error && <InlineAlert>{error}</InlineAlert>}
+        {error && (
+          <InlineAlert>
+            {error}
+            {existingId && (
+              <Link href={sessionHref(existingId)} onClick={onClose} className="ml-1 font-medium underline">
+                Mở phiên đã giao
+              </Link>
+            )}
+          </InlineAlert>
+        )}
         <button type="submit" className="hidden" />
       </form>
     </Modal>

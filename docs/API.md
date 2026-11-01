@@ -139,7 +139,7 @@ Staff only (students reach problems through sessions).
 | GET | /sessions?classId=&audience=CLASS\|PUBLIC | any | – | SessionDto[] — students: sessions of their current/former classes + public; teachers: their classes + public; admin: all |
 | GET | /sessions/:id | manager, class (former) member, anyone for public | – | SessionDto (with `myProgress`) |
 | GET | /sessions/:id/problems/:key | same as above | – | SessionProblemDto |
-| POST | /sessions | staff | CreateSessionRequest | SessionDto — source must be in the caller's bank (admin: any); class must be managed and ACTIVE |
+| POST | /sessions | staff | CreateSessionRequest | SessionDto — source must be in the caller's bank (admin: any); class must be managed and ACTIVE. A problem or set is assigned **once per audience** (a class, or public): again → 409 `assessment.already_assigned` with `details.sessionId` of the existing session (also when two requests race, e.g. a double click) |
 | PUT | /sessions/:id | manager | UpdateSessionRequest | SessionDto |
 | DELETE | /sessions/:id | manager | – | 204 (also removes its submissions and progress) |
 | GET | /sessions/:id/results | manager | – | SessionResultsDto — class: every current student (zeros included) plus anyone who submitted; public: participants |

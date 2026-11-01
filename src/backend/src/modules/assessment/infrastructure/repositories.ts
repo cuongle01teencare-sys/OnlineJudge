@@ -105,6 +105,11 @@ export class TypeOrmSessionRepository extends SessionRepository {
     return (await this.db.getRepository(SessionOrmEntity).findBy({ classId })).map((row) => toSession(row, {}));
   }
 
+  async findByAssignmentKey(assignmentKey: string) {
+    const row = await this.db.getRepository(SessionOrmEntity).findOneBy({ assignmentKey });
+    return row ? toSession(row, {}) : null;
+  }
+
   async save(session: Session) {
     const s = session.snapshot;
     await this.db.transaction(async (tx) => {
@@ -115,6 +120,7 @@ export class TypeOrmSessionRepository extends SessionRepository {
         type: s.type,
         classId: s.classId,
         sourceSetId: s.sourceSetId,
+        assignmentKey: s.assignmentKey,
         opensAt: s.window.opensAt,
         closesAt: s.window.closesAt,
         settings: {
@@ -155,6 +161,7 @@ function toSession(row: SessionOrmEntity, tests: Record<string, Session['snapsho
     type: row.type as ProblemSetType,
     classId: row.classId,
     sourceSetId: row.sourceSetId,
+    assignmentKey: row.assignmentKey ?? null,
     window: TimeWindow.of(row.opensAt, row.closesAt),
     settings: row.settings?.feedback ? SessionSettings.of(row.settings) : SessionSettings.defaults,
     createdBy: { id: row.createdById, name: row.createdByName },

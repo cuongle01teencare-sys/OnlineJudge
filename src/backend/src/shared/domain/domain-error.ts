@@ -9,6 +9,8 @@ export class DomainError extends Error {
     readonly kind: DomainErrorKind,
     readonly code: string,
     message: string,
+    /** Extra data for the client (ids it can link to). */
+    readonly details?: Record<string, string>,
   ) {
     super(message);
   }
@@ -22,8 +24,8 @@ export class DomainError extends Error {
   static forbidden(code: string, message: string) {
     return new DomainError('forbidden', code, message);
   }
-  static conflict(code: string, message: string) {
-    return new DomainError('conflict', code, message);
+  static conflict(code: string, message: string, details?: Record<string, string>) {
+    return new DomainError('conflict', code, message, details);
   }
   static unauthorized(code: string, message: string) {
     return new DomainError('unauthorized', code, message);

@@ -95,6 +95,8 @@ export class ApiError extends Error {
     message: string,
     public status: number,
     public code?: string,
+    /** Extra data from the API, e.g. `sessionId` of the session that already exists. */
+    public details?: Record<string, string>,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -159,7 +161,7 @@ async function request<T>(
       setToken(null);
       window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
     }
-    throw new ApiError(message, res.status, err.code);
+    throw new ApiError(message, res.status, err.code, err.details);
   }
   return data as T;
 }

@@ -103,12 +103,22 @@ export interface SessionData {
   /** null = public session. */
   classId: string | null;
   sourceSetId: string | null;
+  /** The bank item and audience this session was assigned from (see `assignmentKeyOf`); null for old sessions. */
+  assignmentKey: string | null;
   window: TimeWindow;
   settings: SessionSettings;
   createdBy: { id: string; name: string };
   problems: SessionProblem[];
   createdAt: Date;
 }
+
+/**
+ * A problem or a set is assigned at most once to the same audience (one class, or everyone): giving it again
+ * (e.g. clicking "Giao bài" twice) would only show students the same work twice. Sessions with the same content
+ * but from different bank items are fine.
+ */
+export const assignmentKeyOf = (source: { kind: 'PROBLEM' | 'SET'; id: string }, classId: string | null): string =>
+  `${source.kind}:${source.id}:${classId ?? 'PUBLIC'}`;
 
 export type NewSession = Omit<SessionData, 'problems' | 'createdAt'> & { problems: Omit<SessionProblem, 'key'>[] };
 

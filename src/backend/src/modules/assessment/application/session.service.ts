@@ -23,7 +23,7 @@ import {
   type SubmissionJudgedEvent,
 } from '../../judging/judging.events.js';
 import { AttemptRepository, SessionRepository } from '../domain/repositories.js';
-import { Attempt, Session, SessionSettings, TimeWindow, type ResultVisibility } from '../domain/session.js';
+import { assignmentKeyOf, Attempt, Session, SessionSettings, TimeWindow, type ResultVisibility } from '../domain/session.js';
 import { ClassAccess, LearningRecordStore, ProblemCatalog, type ClassInfo, type RecordProgress } from './ports.js';
 import { ProblemSetService } from './problem-set.service.js';
 
@@ -253,6 +253,13 @@ export class SessionService {
       title = '';
       type = 'PRACTICE';
     }
+    const assignmentKey = assignmentKeyOf(
+      input.source.kind === 'SET' ? { kind: 'SET', id: input.source.setId } : { kind: 'PROBLEM', id: input.source.problemId },
+      input.classId,
+    );
+    const existing = await this.sessions.findByAssignmentKey(assignmentKey);
+    if (existing) throw await this.alreadyAssigned(existing);
+
     const snapshots = await this.problems.snapshot(actor, items.map((i) => i.problemId));
     if (input.source.kind === 'PROBLEM') title = snapshots[0].title;
 
@@ -262,14 +269,35 @@ export class SessionService {
       type,
       classId: input.classId,
       sourceSetId,
+      assignmentKey,
       window: windowOf(input.opensAt, input.closesAt),
       settings: input.settings ? SessionSettings.of(input.settings) : SessionSettings.defaults,
       createdBy: { id: actor.id, name: actor.name },
       problems: snapshots.map((snap, i) => ({ ...snap, points: items[i].points })),
     });
-    await this.sessions.save(session);
+    try {
+      await this.sessions.save(session);
+    } catch (error) {
+      // Two requests at once (a double click) both passed the check above; the unique key let only one in.
+      const winner = await this.sessions.findByAssignmentKey(assignmentKey);
+      if (winner) throw await this.alreadyAssigned(winner);
+      throw error;
+    }
     await this.putRecordSession(session);
     return (await this.dtos(actor, [session]))[0];
+  }
+
+  private async alreadyAssigned(session: Session): Promise<DomainError> {
+    const s = session.snapshot;
+    const where = s.classId
+      ? `lớp ${(await this.classes.getClasses([s.classId])).get(s.classId)?.name ?? ''}`.trim()
+      : 'mọi người (công khai)';
+    return DomainError.conflict(
+      'assessment.already_assigned',
+      `${s.sourceSetId ? 'Đề' : 'Bài'} này đã được giao cho ${where} trong phiên "${s.title}" (do ${s.createdBy.name} giao). `
+        + 'Mỗi bài hoặc đề chỉ giao một lần cho cùng một nơi: hãy mở phiên đó để đổi thời gian hoặc cài đặt.',
+      { sessionId: session.id },
+    );
   }
 
   async update(actor: Actor, id: string, input: UpdateSessionRequest): Promise<SessionDto> {

@@ -21,7 +21,12 @@ export class ApiExceptionFilter implements ExceptionFilter {
     let body: ApiErrorBody;
 
     if (exception instanceof DomainError) {
-      body = { statusCode: STATUS[exception.kind], message: exception.message, code: exception.code };
+      body = {
+        statusCode: STATUS[exception.kind],
+        message: exception.message,
+        code: exception.code,
+        ...(exception.details ? { details: exception.details } : {}),
+      };
     } else if (exception instanceof HttpException) {
       const payload = exception.getResponse();
       const raw = typeof payload === 'string' ? payload : (payload as { message?: string | string[] }).message;

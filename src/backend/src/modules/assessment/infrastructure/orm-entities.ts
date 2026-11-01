@@ -32,6 +32,9 @@ export class SessionOrmEntity {
   @Index()
   @Column('uuid', { nullable: true }) classId: string | null;
   @Column('uuid', { nullable: true }) sourceSetId: string | null;
+  /** Unique: the database refuses a second session of the same bank item for the same audience (double clicks). */
+  @Index({ unique: true })
+  @Column({ type: 'varchar', length: 120, nullable: true }) assignmentKey: string | null;
   @Column('timestamptz', { nullable: true }) opensAt: Date | null;
   @Column('timestamptz', { nullable: true }) closesAt: Date | null;
   @Column('jsonb', { default: {} }) settings: {

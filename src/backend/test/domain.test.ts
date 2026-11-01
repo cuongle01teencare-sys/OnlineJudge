@@ -103,7 +103,7 @@ test('session: frozen problems get keys A, B, ...; time window decides the state
   });
   const t0 = new Date('2026-01-10T00:00:00Z');
   const session = Session.create({
-    title: 'Bài tập tuần 1', description: '', type: 'HOMEWORK', classId: 'c1', sourceSetId: null,
+    title: 'Bài tập tuần 1', description: '', type: 'HOMEWORK', classId: 'c1', sourceSetId: null, assignmentKey: null,
     window: TimeWindow.of(t0, new Date(t0.getTime() + 10 * 86_400_000)),
     settings: SessionSettings.defaults,
     createdBy: { id: lan.id, name: lan.name },
@@ -127,7 +127,7 @@ const frozenProblem = (id: string, title: string) => ({
 
 function timedSession(durationMinutes: number | null, closesAt: Date | null, feedback: 'FULL' | 'SCORE_ONLY' | 'HIDDEN_UNTIL_CLOSED' = 'FULL') {
   return Session.create({
-    title: 'Kiểm tra', description: '', type: 'TEST', classId: 'c1', sourceSetId: null,
+    title: 'Kiểm tra', description: '', type: 'TEST', classId: 'c1', sourceSetId: null, assignmentKey: null,
     window: TimeWindow.of(null, closesAt),
     settings: SessionSettings.of({ durationMinutes, allowedLanguages: ['cpp', 'cpp'], maxSubmissionsPerProblem: 3, feedback }),
     createdBy: { id: lan.id, name: lan.name },

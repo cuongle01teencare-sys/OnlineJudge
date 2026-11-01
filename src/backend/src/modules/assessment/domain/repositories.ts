@@ -28,6 +28,8 @@ export abstract class SessionRepository {
   abstract findById(id: string): Promise<Session | null>;
   abstract list(filter: SessionFilter): Promise<Session[]>;
   abstract findByClass(classId: string): Promise<Session[]>;
+  /** Listing-level session (no test data) assigned from that bank item to that audience. */
+  abstract findByAssignmentKey(key: string): Promise<Session | null>;
   abstract save(session: Session): Promise<void>;
   abstract delete(id: string): Promise<void>;
 }
