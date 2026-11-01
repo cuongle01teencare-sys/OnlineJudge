@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import JSZip from 'jszip';
 import mammoth from 'mammoth';
 import { DomainError } from '../../../shared/domain/domain-error.js';
 import { DocumentReader, type UploadedFile } from '../application/ports.js';
 import type { DocumentBlock, ExamDocument } from '../domain/exam-document.js';
+import { inlineEquations } from './omml.js';
 
 /** Reads .docx through mammoth (HTML keeps tables, which often hold sample tests) and .pdf through unpdf. */
 @Injectable()
@@ -10,7 +12,7 @@ export class MammothPdfDocumentReader extends DocumentReader {
   async read(file: UploadedFile): Promise<ExamDocument> {
     const name = file.originalName.toLowerCase();
     if (name.endsWith('.docx')) {
-      const { value } = await mammoth.convertToHtml({ buffer: file.buffer });
+      const { value } = await mammoth.convertToHtml({ buffer: await withPlainEquations(file.buffer) });
       return { fileName: file.originalName, blocks: htmlToBlocks(value) };
     }
     if (name.endsWith('.pdf')) {
@@ -24,6 +26,16 @@ export class MammothPdfDocumentReader extends DocumentReader {
   }
 }
 
+/** mammoth drops Word equations; turn them into text runs first (only when the document has any). */
+async function withPlainEquations(buffer: Buffer): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(buffer);
+  const part = zip.file('word/document.xml');
+  const xml = await part?.async('string');
+  if (!xml || !xml.includes('<m:oMath')) return buffer;
+  zip.file('word/document.xml', inlineEquations(xml));
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
 /** Minimal converter for mammoth's (simple, well-formed) HTML output. */
 export function htmlToBlocks(html: string): DocumentBlock[] {
   const blocks: DocumentBlock[] = [];
@@ -33,6 +45,8 @@ export function htmlToBlocks(html: string): DocumentBlock[] {
   let rows: string[][] = [];
   let row: string[] | null = null;
   let cell: string[] | null = null;
+  // Where the current <sup>/<sub> started in `text`.
+  let scriptStart = -1;
 
   const flushParagraph = () => {
     const value = decode(text);
@@ -52,6 +66,14 @@ export function htmlToBlocks(html: string): DocumentBlock[] {
     const tag = /^<\/?\s*([a-z0-9]+)/i.exec(token)?.[1]?.toLowerCase() ?? '';
     const closing = token.startsWith('</');
     switch (tag) {
+      // Word superscript/subscript runs: 10<sup>6</sup> must not read as "106".
+      case 'sup': case 'sub':
+        if (!closing) scriptStart = text.length;
+        else if (scriptStart >= 0) {
+          text = text.slice(0, scriptStart) + script(tag === 'sup' ? '^' : '_', text.slice(scriptStart));
+          scriptStart = -1;
+        }
+        break;
       case 'br':
         text += '\n';
         break;
@@ -90,6 +112,13 @@ export function htmlToBlocks(html: string): DocumentBlock[] {
   }
   if (text.trim()) flushParagraph();
   return blocks;
+}
+
+/** 10^6, 10^{18}, a_i, a_{i+1}: plain text that also reads as LaTeX. */
+function script(mark: '^' | '_', inner: string): string {
+  const value = inner.trim();
+  if (!value) return inner;
+  return decode(value).length === 1 ? `${mark}${value}` : `${mark}{${value}}`;
 }
 
 function decode(s: string): string {

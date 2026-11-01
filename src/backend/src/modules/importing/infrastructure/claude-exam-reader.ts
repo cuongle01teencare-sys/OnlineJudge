@@ -30,11 +30,14 @@ const SYSTEM = `Bạn đọc đề thi lập trình (thường bằng tiếng Vi
 Với mỗi bài:
 - title: tên bài, bỏ số thứ tự "Bài 1", số điểm và tên file.
 - statement, inputFormat, outputFormat, constraints: giữ nguyên nội dung gốc, viết bằng Markdown; công thức viết dạng LaTeX $...$.
+  Hệ thống chấm chỉ dùng đầu vào/đầu ra chuẩn, không dùng file: nếu đề yêu cầu đọc từ file (BAI1.INP...) hoặc ghi ra file (BAI1.OUT...),
+  hãy viết lại thành đọc từ đầu vào chuẩn và in ra màn hình (đầu ra chuẩn), bỏ tên file và dòng "tên file chương trình".
   Nếu đề không tách riêng phần nào thì để chuỗi rỗng, không tự bịa.
 - samples: các ví dụ vào/ra, giữ nguyên từng dòng và khoảng trắng; mỗi chuỗi kết thúc bằng một ký tự xuống dòng.
 - timeLimitMs / memoryLimitMb: theo đề (giây → ms). Nếu đề không ghi thì dùng 1000 và 256, và đặt timeLimitStated = false.
 - difficulty: theo đề nếu có ghi (difficultyStated = true); nếu không thì tự ước lượng và đặt difficultyStated = false.
 - notes: những điểm giáo viên nên kiểm tra lại (hình vẽ không đọc được, ví dụ bị thiếu, chỗ mờ...), bằng tiếng Việt, ngắn gọn.
+  Không ghi chú gì về việc đọc/ghi file.
 Bỏ qua phần đầu đề (tên kỳ thi, thời gian làm bài cả đề, bảng tổng hợp tên file).`;
 
 /** Claude reads the original document: PDF as a document block (layout and scans included), DOCX as extracted text. */
@@ -54,7 +57,7 @@ export class ClaudeExamReader extends SmartExamReader {
     const isPdf = file.originalName.toLowerCase().endsWith('.pdf');
     const source: Anthropic.Beta.BetaContentBlockParam = isPdf
       ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: file.buffer.toString('base64') } }
-      : { type: 'text', text: `Nội dung đề (trích từ file Word, bảng ghi dạng "ô | ô"):\n\n${extracted ? documentText(extracted) : ''}` };
+      : { type: 'text', text: `Nội dung đề (trích từ file Word, bảng ghi dạng "ô | ô"; số mũ ghi dạng 10^6 hoặc 10^{18}, chỉ số dưới dạng a_i, công thức Word đã đổi sang dạng chữ như (a+b)/2, sqrt(n); đó là đúng nội dung gốc, không cần ghi chú kiểm tra):\n\n${extracted ? documentText(extracted) : ''}` };
 
     const response = await this.claude.api!.beta.messages.parse({
       ...ClaudeClient.target(this.claude.models.examReader),

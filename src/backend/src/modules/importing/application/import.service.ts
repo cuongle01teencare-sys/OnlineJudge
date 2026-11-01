@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { ImportProblemsResponse, ParsedExamDto, ProblemDraftDto } from '@oj/contracts';
 import type { Actor } from '../../../shared/application/actor.js';
 import { assert } from '../../../shared/domain/domain-error.js';
+import { isAboutFileIo, toStandardIo } from '../../../shared/domain/standard-io.js';
 import { documentText, type ExamDocument } from '../domain/exam-document.js';
 import { ExamParser } from '../domain/exam-parser.js';
 import { DocumentReader, ProblemCatalogGateway, SmartExamReader, type UploadedFile } from './ports.js';
@@ -29,7 +30,7 @@ export class ImportService {
     if (this.smartReader.available) {
       try {
         const drafts = await this.smartReader.read(file, doc);
-        return { fileName: file.originalName, parser: 'AI', drafts, rawText };
+        return { fileName: file.originalName, parser: 'AI', drafts: drafts.map(withStandardIo), rawText };
       } catch (error) {
         this.logger.warn(`AI reader failed for ${file.originalName}, using the rule-based parser: ${(error as Error).message}`);
       }
@@ -37,7 +38,7 @@ export class ImportService {
 
     assert(doc && rawText.trim().length > 0, 'import.empty_document',
       'Không đọc được chữ trong tài liệu (có thể là PDF dạng ảnh scan). Đọc đề bằng AI sẽ xử lý được loại tệp này.');
-    return { fileName: file.originalName, parser: 'BASIC', drafts: this.parser.parse(doc), rawText };
+    return { fileName: file.originalName, parser: 'BASIC', drafts: this.parser.parse(doc).map(withStandardIo), rawText };
   }
 
   /** Step 2: create problems from the reviewed drafts; samples become sample test cases. */
@@ -65,4 +66,16 @@ export class ImportService {
     }
     return { problemIds };
   }
+}
+
+/** The judge uses standard input/output only: file wording is rewritten and hints about files dropped. */
+function withStandardIo(draft: ProblemDraftDto): ProblemDraftDto {
+  return {
+    ...draft,
+    statement: toStandardIo(draft.statement),
+    inputFormat: toStandardIo(draft.inputFormat),
+    outputFormat: toStandardIo(draft.outputFormat, 'output'),
+    constraints: toStandardIo(draft.constraints),
+    warnings: draft.warnings.filter((w) => !isAboutFileIo(w)),
+  };
 }

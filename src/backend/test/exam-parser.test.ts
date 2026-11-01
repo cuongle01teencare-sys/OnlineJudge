@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { ExamParser } from '../src/modules/importing/domain/exam-parser.js';
 import type { DocumentBlock } from '../src/modules/importing/domain/exam-document.js';
 import { htmlToBlocks } from '../src/modules/importing/infrastructure/document-reader.js';
+import { inlineEquations } from '../src/modules/importing/infrastructure/omml.js';
 
 const p = (text: string): DocumentBlock => ({ kind: 'paragraph', text });
 const parse = (blocks: DocumentBlock[]) => new ExamParser().parse({ fileName: 'de.docx', blocks });
@@ -74,4 +75,22 @@ test('converts mammoth HTML (paragraphs, line breaks, tables) to blocks', () => 
     { kind: 'table', rows: [['Input', 'Output'], ['1\n2', '3']] },
     { kind: 'paragraph', text: 'x\ny' },
   ]);
+});
+
+test('superscripts and subscripts from Word keep their meaning', () => {
+  const blocks = htmlToBlocks('<p>|a| ≤ 10<sup>6</sup>, a<sub>i</sub> ≤ 10<sup>18</sup>, x<sup>&lt;</sup></p>');
+  assert.deepEqual(blocks, [{ kind: 'paragraph', text: '|a| ≤ 10^6, a_i ≤ 10^{18}, x^<' }]);
+});
+
+test('Word equations become plain text instead of disappearing', () => {
+  const r = (t: string) => `<m:r><m:t>${t}</m:t></m:r>`;
+  const xml =
+    '<w:p><w:r><w:t>n ≤ </w:t></w:r>' +
+    `<m:oMath><m:sSup><m:sSupPr><m:ctrlPr/></m:sSupPr><m:e>${r('10')}</m:e><m:sup>${r('5')}</m:sup></m:sSup></m:oMath>` +
+    `<m:oMath><m:f><m:num>${r('a+b')}</m:num><m:den>${r('2')}</m:den></m:f></m:oMath>` +
+    `<m:oMath><m:sSub><m:e>${r('a')}</m:e><m:sub>${r('i+1')}</m:sub></m:sSub></m:oMath>` +
+    `<m:oMath><m:rad><m:radPr><m:degHide m:val="1"/></m:radPr><m:deg/><m:e>${r('n')}</m:e></m:rad></m:oMath>` +
+    `<m:oMath><m:d><m:e>${r('a')}</m:e><m:e>${r('b')}</m:e></m:d></m:oMath></w:p>`;
+  const texts = [...inlineEquations(xml).matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1]);
+  assert.deepEqual(texts, ['n ≤ ', '10^5', '(a+b)/2', 'a_{i+1}', 'sqrt(n)', '(a,b)']);
 });

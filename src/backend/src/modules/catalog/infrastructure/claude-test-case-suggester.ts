@@ -3,6 +3,7 @@ import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { Injectable, Logger } from '@nestjs/common';
 import type { TestCaseSuggestionsDto } from '@oj/contracts';
 import { z } from 'zod';
+import { isAboutFileIo } from '../../../shared/domain/standard-io.js';
 import { ClaudeClient } from '../../../shared/infrastructure/claude.js';
 import { TestCaseSuggester, type TestSuggestionContext } from '../application/ports.js';
 
@@ -24,9 +25,10 @@ Cách làm:
 2. Tính output bằng cách CHẠY CODE trong công cụ code execution: viết lời giải bằng Python (nếu có lời giải mẫu thì dựa theo nó, hoặc chạy chính nó nếu môi trường có trình biên dịch), kiểm tra lời giải với các test đã có, rồi chạy trên từng input mới. Với bài nhỏ, nên viết thêm một lời giải vét cạn để đối chiếu.
    outputVerified = true chỉ khi output được lấy từ kết quả chạy code VÀ lời giải đó cho đúng các test đã có (nếu có). Nếu phải tự tính tay thì đặt false.
 3. Mỗi input phải đúng định dạng đề và thỏa ràng buộc. Giữ test gọn: mỗi input tối đa khoảng 2000 ký tự. Nếu cần test rất lớn (ví dụ n = 10^5) thì không đưa vào, chỉ ghi vào notes để giáo viên tự sinh bằng chương trình.
-4. input và expectedOutput giữ nguyên từng dòng, mỗi chuỗi kết thúc bằng một ký tự xuống dòng.
+4. Hệ thống chấm đưa input vào đầu vào chuẩn và so sánh đầu ra chuẩn, không dùng file (kể cả khi đề nhắc tới file .INP/.OUT).
+   input và expectedOutput giữ nguyên từng dòng, mỗi chuỗi kết thúc bằng một ký tự xuống dòng.
 5. purpose: một câu ngắn bằng tiếng Việt nói test kiểm tra điều gì.
-6. notes: những điều giáo viên nên xem lại (đề mơ hồ, có nhiều đáp án đúng nên cần checker riêng, lời giải mẫu có vẻ sai với test đã có...), bằng tiếng Việt, ngắn gọn. Có thể để trống.`;
+6. notes: những điều giáo viên nên xem lại (đề mơ hồ, có nhiều đáp án đúng nên cần checker riêng, lời giải mẫu có vẻ sai với test đã có...), bằng tiếng Việt, ngắn gọn. Không ghi chú về đọc/ghi file. Có thể để trống.`;
 
 const MAX_ROUNDS = 4;
 const SHOWN_TEST_CHARS = 1500;
@@ -81,7 +83,8 @@ export class ClaudeTestCaseSuggester extends TestCaseSuggester {
           purpose: t.purpose.trim(),
           outputVerified: t.outputVerified,
         })),
-      notes: parsed.notes.map((n) => n.trim()).filter(Boolean),
+      // The judge never uses files, so hints about them only confuse the teacher.
+      notes: parsed.notes.map((n) => n.trim()).filter((n) => n && !isAboutFileIo(n)),
     };
   }
 }
