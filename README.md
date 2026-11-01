@@ -13,6 +13,7 @@ Hệ thống chấm bài lập trình tự động cho lớp học:
   - Hiển thị kết quả cho học sinh: đầy đủ, chỉ điểm, hoặc ẩn đến khi phiên đóng. Giáo viên luôn thấy đầy đủ.
   - **Chấm lại** cả phiên hoặc một bài, và "Cập nhật đề từ ngân hàng & chấm lại" khi đã sửa test. Điểm và học bạ được tính lại theo kết quả mới.
 - **Đọc đề bằng AI** (khi có `ANTHROPIC_API_KEY`): Claude đọc thẳng file PDF (kể cả bố cục lộn xộn hoặc bản scan) hoặc nội dung Word để tách bài. Không có key hoặc AI lỗi thì dùng bộ đọc theo mẫu.
+- **Gợi ý test bằng AI**: ở tab Test của bài, bấm *Gợi ý bằng AI*. Claude đọc đề, các test hiện có và lời giải mẫu, đề xuất test biên/đặc biệt, rồi **chạy code** trong sandbox của Anthropic để tính output. Giáo viên xem, sửa và chọn test nào để thêm; test có output do AI tự tính (không chạy được code) được đánh dấu để kiểm tra lại.
 - **Kiểm tra liêm chính** (hai công tắc riêng cho mỗi phiên, chỉ giáo viên thấy, không bao giờ đổi điểm):
   - *Đạo văn*: so "vân tay" code giữa các học sinh cùng phiên, bỏ qua tên biến, chú thích và định dạng (cùng ý tưởng với MOSS). Không cần AI.
   - *Dùng AI*: Claude đánh giá thận trọng từng bài nộp, chỉ ra đoạn code đáng ngờ kèm lý do.
@@ -104,7 +105,7 @@ pnpm dev:frontend
 - API: http://localhost:4000/api. Frontend: http://localhost:3000
 - Admin mặc định lấy từ `.env`: `admin@oj.local` / `admin12345`. **Hãy đổi trước khi dùng thật.**
 - Gửi email: khi để trống `SMTP_HOST`, email (mã OTP, link mời) **được in ra log của backend** thay vì gửi thật. Để gửi bằng Gmail, bạn cần bật xác minh 2 bước cho tài khoản Gmail, tạo **App Password**, rồi đặt `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER=<gmail>` và `SMTP_PASS=<app password>`. Gmail giới hạn khoảng 500 email/ngày, đủ cho một lớp học.
-- AI: đặt `ANTHROPIC_API_KEY` trong `src/backend/.env`. Model chọn riêng cho từng việc: `CLAUDE_MODEL` cho đọc đề (mặc định `claude-sonnet-5-5`) và `CLAUDE_REVIEW_MODEL` cho kiểm tra dùng AI (mặc định `claude-haiku-5-5`, rẻ vì chạy trên từng bài nộp). Khi để trống key, đọc đề dùng bộ đọc theo mẫu và bỏ qua kiểm tra dùng AI. Với Sonnet/Opus, lệnh gọi bật sẵn *refusal fallback* phía server (`fallbacks: "default"`); Haiku không hỗ trợ nên không gửi tham số này.
+- AI: đặt `ANTHROPIC_API_KEY` trong `src/backend/.env`. Model chọn riêng cho từng việc: `CLAUDE_MODEL` cho đọc đề (mặc định `claude-sonnet-5-5`), `CLAUDE_TESTGEN_MODEL` cho gợi ý test (mặc định bằng `CLAUDE_MODEL`) và `CLAUDE_REVIEW_MODEL` cho kiểm tra dùng AI (mặc định `claude-haiku-5-5`, rẻ vì chạy trên từng bài nộp). Khi để trống key, đọc đề dùng bộ đọc theo mẫu và bỏ qua kiểm tra dùng AI. Với Sonnet/Opus, lệnh gọi bật sẵn *refusal fallback* phía server (`fallbacks: "default"`); Haiku không hỗ trợ nên không gửi tham số này.
 - Giáo viên tạo lớp và đặt mã lớp ở trang **Lớp**. Học sinh dùng mã đó để xin vào lớp (khi đăng ký hoặc ở trang **Lớp của tôi**), rồi giáo viên duyệt ở trang lớp.
 - Không có Docker? Có thể chạy engine với `SANDBOX=local`: code chạy thẳng trên máy, **không cách ly**, chỉ dùng để thử.
 

@@ -5,6 +5,7 @@ import { ProblemService } from '../application/problem.service.js';
 import {
   ProblemListQuery,
   SharingBody,
+  SuggestTestCasesBody,
   UpsertProblemBody,
   UpsertSolutionBody,
   UpsertTestCaseBody,
@@ -54,6 +55,12 @@ export class ProblemsController {
   @Post(':id/test-cases')
   addTestCase(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpsertTestCaseBody) {
     return this.problems.addTestCase(actor, id, body);
+  }
+
+  /** AI suggestions to review; nothing is saved. */
+  @Post(':id/test-cases/suggest') @HttpCode(200)
+  suggestTestCases(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string, @Body() body: SuggestTestCasesBody) {
+    return this.problems.suggestTestCases(actor, id, body);
   }
 
   @Put(':id/test-cases/:testCaseId')

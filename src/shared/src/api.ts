@@ -278,6 +278,30 @@ export interface UpsertTestCaseRequest {
   points: number;
 }
 
+/** Ask the AI for test cases that the bank's existing tests do not cover yet. */
+export interface SuggestTestCasesRequest {
+  /** 1–10, default 5. */
+  count?: number;
+  /** What to focus on, e.g. "biên lớn", "n = 1". */
+  focus?: string | null;
+}
+
+export interface TestCaseSuggestionDto {
+  input: string;
+  expectedOutput: string;
+  /** Short Vietnamese note on what this test checks. */
+  purpose: string;
+  /** The output was computed by running a solution, not worked out by the model alone. */
+  outputVerified: boolean;
+}
+
+/** Suggestions are not saved; the teacher picks which ones to add. */
+export interface TestCaseSuggestionsDto {
+  suggestions: TestCaseSuggestionDto[];
+  /** Things the teacher should check (ambiguous statement, tests too large to generate...). */
+  notes: string[];
+}
+
 export interface UpsertSolutionRequest {
   explanation: string;
   language: Language | null;

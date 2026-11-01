@@ -1,13 +1,14 @@
 'use client';
 
 import type { TestCaseDto, UpsertTestCaseRequest } from '@oj/contracts';
-import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Pencil, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { IoTextarea } from '../form-fields';
 import { useToast } from '../toast';
 import { Badge, Button, Card, ConfirmDialog, EmptyState, inputClass, Modal } from '../ui';
+import { FEW_TESTS, SuggestTestsDialog } from './test-suggestions';
 
 const emptyTest: UpsertTestCaseRequest = { input: '', expectedOutput: '', isSample: false, points: 10 };
 
@@ -31,6 +32,7 @@ export function TestCaseManager({
   const [deleting, setDeleting] = useState<TestCaseDto | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [suggesting, setSuggesting] = useState(false);
 
   const sorted = [...testCases].sort((a, b) => a.order - b.order);
   const totalPoints = sorted.reduce((s, t) => s + (t.points || 0), 0);
@@ -95,14 +97,32 @@ export function TestCaseManager({
             Tổng điểm test: {totalPoints}. Điểm bài nộp được quy đổi về thang 100. Test &quot;ví dụ&quot; hiển thị cho học sinh.
           </p>
         </div>
-        <Button size="sm" onClick={() => setEditing({ id: null, value: { ...emptyTest } })}>
-          <Plus className="h-4 w-4" />
-          Thêm test
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="secondary" onClick={() => setSuggesting(true)}>
+            <Sparkles className="h-4 w-4" />
+            Gợi ý bằng AI
+          </Button>
+          <Button size="sm" onClick={() => setEditing({ id: null, value: { ...emptyTest } })}>
+            <Plus className="h-4 w-4" />
+            Thêm test
+          </Button>
+        </div>
       </div>
 
+      {sorted.length > 0 && sorted.length < FEW_TESTS && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-ink-50/60 px-5 py-2 text-sm text-slate-700">
+          <span>Bộ test còn ít ({sorted.length} test), học sinh có thể qua bài dù code còn sai ở trường hợp biên.</span>
+          <Button size="sm" variant="ghost" onClick={() => setSuggesting(true)}>
+            <Sparkles className="h-4 w-4" />
+            Để AI gợi ý thêm
+          </Button>
+        </div>
+      )}
+
       {sorted.length === 0 ? (
-        <EmptyState title="Chưa có test nào">Thêm ít nhất một test để có thể chấm bài.</EmptyState>
+        <EmptyState title="Chưa có test nào">
+          Thêm ít nhất một test để có thể chấm bài, hoặc bấm <b>Gợi ý bằng AI</b> để AI đề xuất từ đề bài.
+        </EmptyState>
       ) : (
         <ul className="divide-y divide-slate-100">
           {sorted.map((t, i) => {
@@ -213,6 +233,13 @@ export function TestCaseManager({
           </div>
         )}
       </Modal>
+
+      <SuggestTestsDialog
+        open={suggesting}
+        onClose={() => setSuggesting(false)}
+        problemId={problemId}
+        onAdded={(added) => onChange([...testCases, ...added])}
+      />
 
       <ConfirmDialog
         open={!!deleting}

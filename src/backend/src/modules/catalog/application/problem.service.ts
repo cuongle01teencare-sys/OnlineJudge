@@ -1,11 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type {
   Paginated,
   ProblemDetailDto,
   ProblemSummaryDto,
   SharingDto,
   SolutionDto,
+  SuggestTestCasesRequest,
   TestCaseDto,
+  TestCaseSuggestionsDto,
   UpsertProblemRequest,
   UpsertSolutionRequest,
   UpsertTestCaseRequest,
@@ -16,14 +18,18 @@ import { DomainError } from '../../../shared/domain/domain-error.js';
 import { Problem, ResourceLimits, Sharing, Solution } from '../domain/problem.js';
 import { ProblemQueries, ProblemRepository, type ProblemListFilter } from '../domain/problem.repository.js';
 import { toDetailDto, toSummaryDto, toTestCaseDto } from './problem.mapper.js';
+import { TestCaseSuggester } from './ports.js';
 
 /** Application service for problem blueprints in teachers' banks. */
 @Injectable()
 export class ProblemService {
+  private readonly logger = new Logger(ProblemService.name);
+
   constructor(
     private readonly problems: ProblemRepository,
     private readonly queries: ProblemQueries,
     private readonly events: EventPublisher,
+    private readonly suggester: TestCaseSuggester,
   ) {}
 
   // ---------- Queries ----------
@@ -112,6 +118,38 @@ export class ProblemService {
     await this.problems.save(problem);
   }
 
+  /** AI-proposed tests for the editor to review; nothing is saved. */
+  async suggestTestCases(actor: Actor, problemId: string, input: SuggestTestCasesRequest): Promise<TestCaseSuggestionsDto> {
+    const problem = await this.loadEditable(actor, problemId);
+    if (!this.suggester.available) {
+      throw DomainError.validation('catalog.ai_unavailable', 'Máy chủ chưa cấu hình AI nên chưa gợi ý test được.');
+    }
+    const { content, limits, solution } = problem;
+    let result: TestCaseSuggestionsDto;
+    try {
+      result = await this.suggester.suggest({
+        ...content,
+        ...limits,
+        existingTests: problem.testCases.slice(0, MAX_SHOWN_TESTS).map((t) => ({ input: t.data.input, expectedOutput: t.data.expectedOutput })),
+        solution: solution && { language: solution.language, code: solution.code, explanation: solution.explanation },
+        count: input.count ?? 5,
+        focus: input.focus?.trim() || null,
+      });
+    } catch (error) {
+      this.logger.warn(`Test suggestions failed for ${problem.code}: ${(error as Error).message}`);
+      throw DomainError.validation('catalog.ai_failed', 'AI chưa gợi ý được test lúc này. Hãy thử lại sau ít phút.');
+    }
+    // Drop suggestions whose input the problem (or an earlier suggestion) already has.
+    const seen = new Set(problem.testCases.map((t) => sameInput(t.data.input)));
+    const suggestions = result.suggestions.filter((s) => {
+      const key = sameInput(s.input);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return { ...result, suggestions };
+  }
+
   async setSolution(actor: Actor, problemId: string, input: UpsertSolutionRequest): Promise<SolutionDto> {
     const problem = await this.loadEditable(actor, problemId);
     const solution = Solution.of(input.explanation, input.language, input.code);
@@ -140,5 +178,7 @@ export class ProblemService {
   }
 }
 
+const MAX_SHOWN_TESTS = 10;
+const sameInput = (s: string) => s.trim().split(/\s+/).join(' ');
 const owner = (actor: Actor) => ({ id: actor.id, name: actor.name });
 const limitsOf = (input: UpsertProblemRequest) => ResourceLimits.of(input.timeLimitMs, input.memoryLimitMb);

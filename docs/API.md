@@ -102,6 +102,7 @@ Staff only (students reach problems through sessions).
 | PUT | /problems/:id/sharing | owner or admin | SharingDto | ProblemDetailDto |
 | POST | /problems/:id/copy | staff, problem public (or admin) | – | ProblemDetailDto — copy in the caller's bank (hidden tests / solution only if shared) |
 | POST | /problems/:id/test-cases | owner or admin | UpsertTestCaseRequest | TestCaseDto |
+| POST | /problems/:id/test-cases/suggest | owner or admin | SuggestTestCasesRequest (`count` 1–10, default 5; optional `focus`) | 200 TestCaseSuggestionsDto — AI-proposed tests, **not saved**; the editor adds the ones they keep with POST /problems/:id/test-cases. Claude computes outputs by running code (`outputVerified`). Inputs the problem already has are dropped. 400 `catalog.ai_unavailable` without ANTHROPIC_API_KEY, `catalog.ai_failed` when the AI call fails. Takes 30 s – 2 min |
 | PUT | /problems/:id/test-cases/:testCaseId | owner or admin | UpsertTestCaseRequest | TestCaseDto |
 | DELETE | /problems/:id/test-cases/:testCaseId | owner or admin | – | 204 |
 | PUT | /problems/:id/solution | owner or admin | UpsertSolutionRequest | SolutionDto |

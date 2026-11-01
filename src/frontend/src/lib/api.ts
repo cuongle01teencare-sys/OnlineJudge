@@ -45,7 +45,9 @@ import type {
   SubmissionDetailDto,
   SubmissionDto,
   SubmitRequest,
+  SuggestTestCasesRequest,
   TestCaseDto,
+  TestCaseSuggestionsDto,
   ThreadDto,
   ThreadReplyDto,
   ThreadSummaryDto,
@@ -255,6 +257,8 @@ export const api = {
     request<TestCaseDto>('POST', `/problems/${problemId}/test-cases`, { body }),
   updateTestCase: (problemId: string, testCaseId: string, body: UpsertTestCaseRequest) =>
     request<TestCaseDto>('PUT', `/problems/${problemId}/test-cases/${testCaseId}`, { body }),
+  suggestTestCases: (problemId: string, body: SuggestTestCasesRequest) =>
+    request<TestCaseSuggestionsDto>('POST', `/problems/${problemId}/test-cases/suggest`, { body }),
   deleteTestCase: (problemId: string, testCaseId: string) =>
     request<void>('DELETE', `/problems/${problemId}/test-cases/${testCaseId}`),
   saveSolution: (problemId: string, body: UpsertSolutionRequest) =>

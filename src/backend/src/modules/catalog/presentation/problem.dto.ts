@@ -9,6 +9,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   ValidateIf,
@@ -39,6 +40,11 @@ export class UpsertTestCaseBody {
   @IsString() expectedOutput: string;
   @IsBoolean() isSample: boolean;
   @Type(() => Number) @IsNumber() @Min(0) points: number;
+}
+
+export class SuggestTestCasesBody {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10, { message: 'Mỗi lần gợi ý tối đa 10 test.' }) count?: number;
+  @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(300) focus?: string | null;
 }
 
 export class SharingBody {
