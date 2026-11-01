@@ -300,6 +300,11 @@ export interface TestCaseSuggestionsDto {
   suggestions: TestCaseSuggestionDto[];
   /** Things the teacher should check (ambiguous statement, tests too large to generate...). */
   notes: string[];
+  /**
+   * Parts of the teacher's `focus` the AI did not follow because they contradict the statement
+   * (the statement, input/output and constraints always win), each with the AI's explanation.
+   */
+  focusRejections?: string[];
 }
 
 /** The problem as currently typed (it may not be saved yet): context for a section suggestion. */

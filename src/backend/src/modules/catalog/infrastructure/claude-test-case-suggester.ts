@@ -16,11 +16,20 @@ const SuggestionsSchema = z.object({
     }),
   ),
   notes: z.array(z.string()),
+  focusRejections: z.array(z.string()),
 });
 
 const SYSTEM = `Bạn giúp giáo viên tin học viết thêm test cho một bài lập trình (đề thường bằng tiếng Việt).
+Thứ tự ưu tiên (bắt buộc):
+- Đề bài, Dữ liệu vào, Kết quả và Ràng buộc là quy định của bài, đứng trên mọi yêu cầu khác. Mọi test PHẢI hợp lệ theo chúng:
+  đúng kiểu dữ liệu (ví dụ "số nguyên dương" thì không có số 0 hay số âm), nằm trong giới hạn, đúng định dạng từng dòng.
+- "Mong muốn thêm của giáo viên" (nếu có) chỉ dùng để chọn test TRONG phạm vi đề cho phép. Phần nào của mong muốn đó
+  trái với đề (đòi giá trị ngoài ràng buộc, sai kiểu, sai định dạng...) thì KHÔNG làm theo phần đó, vẫn làm phần còn lại,
+  và ghi vào focusRejections một câu tiếng Việt cho mỗi phần bị từ chối: trích phần yêu cầu, nói nó trái với câu nào của đề
+  và em đã làm gì thay thế. Ví dụ: "Không dùng số âm và số 0 như yêu cầu vì đề ghi a, b là số nguyên dương; thay vào đó đã
+  dùng giá trị nhỏ nhất hợp lệ là 1." Nếu không từ chối gì thì để focusRejections rỗng.
 Cách làm:
-1. Đọc kỹ đề, định dạng vào/ra và ràng buộc. Chọn các test bổ sung cho bộ test hiện có: trường hợp biên (giá trị nhỏ nhất/lớn nhất trong khả năng, n = 1, toàn số bằng nhau, số âm, kết quả 0...), trường hợp đặc biệt dễ sai, và vài test ngẫu nhiên vừa phải. Không lặp lại test đã có.
+1. Đọc kỹ đề, định dạng vào/ra và ràng buộc. Chọn các test bổ sung cho bộ test hiện có: trường hợp biên (giá trị nhỏ nhất/lớn nhất mà đề cho phép, n = 1, toàn số bằng nhau, số âm hay số 0 nếu đề cho phép...), trường hợp đặc biệt dễ sai, và vài test ngẫu nhiên vừa phải. Không lặp lại test đã có.
 2. LUÔN tính output bằng cách CHẠY CODE trong công cụ code execution trước khi trả lời, kể cả với bài rất đơn giản (giáo viên cần biết output đã được chạy thử): viết lời giải bằng Python (nếu có lời giải mẫu thì dựa theo nó, hoặc chạy chính nó nếu môi trường có trình biên dịch), kiểm tra lời giải với các test đã có, rồi chạy trên từng input mới. Với bài nhỏ, nên viết thêm một lời giải vét cạn để đối chiếu.
    outputVerified = true chỉ khi output được lấy từ kết quả chạy code VÀ lời giải đó cho đúng các test đã có (nếu có). Nếu phải tự tính tay thì đặt false.
 3. Mỗi input phải đúng định dạng đề và thỏa ràng buộc. Giữ test gọn: mỗi input tối đa khoảng 2000 ký tự. Nếu cần test rất lớn (ví dụ n = 10^5) thì không đưa vào, chỉ ghi vào notes để giáo viên tự sinh bằng chương trình.
@@ -90,6 +99,7 @@ export class ClaudeTestCaseSuggester extends TestCaseSuggester {
         })),
       // The judge never uses files, so hints about them only confuse the teacher.
       notes: parsed.notes.map((n) => n.trim()).filter((n) => n && !isAboutFileIo(n)),
+      focusRejections: parsed.focusRejections.map((r) => r.trim()).filter(Boolean),
     };
   }
 }
@@ -117,7 +127,9 @@ function prompt(c: TestSuggestionContext): string {
     `## Các test hiện có\n${tests}\n\n` +
     solution +
     `Hãy gợi ý ${c.count} test mới.` +
-    (c.focus ? ` Giáo viên muốn tập trung vào: ${c.focus}` : '')
+    (c.focus
+      ? `\n\n## Mong muốn thêm của giáo viên (chỉ làm theo phần không trái với đề)\n${c.focus}`
+      : '')
   );
 }
 

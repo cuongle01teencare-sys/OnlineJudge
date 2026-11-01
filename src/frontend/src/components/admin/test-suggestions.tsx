@@ -46,6 +46,7 @@ export function SuggestTestsDialog({
   const [loading, setLoading] = useState(false);
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
+  const [rejections, setRejections] = useState<string[]>([]);
   const [points, setPoints] = useState(10);
   const [adding, setAdding] = useState(false);
 
@@ -56,6 +57,7 @@ export function SuggestTestsDialog({
     if (busy) return;
     setDrafts(null);
     setNotes([]);
+    setRejections([]);
     onClose();
   };
 
@@ -66,6 +68,7 @@ export function SuggestTestsDialog({
       // Tests whose output the AI computed by hand start unticked: the editor should check them first.
       setDrafts(res.suggestions.map((s) => ({ ...s, picked: s.outputVerified, open: false, isSample: false })));
       setNotes(res.notes);
+      setRejections(res.focusRejections ?? []);
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
@@ -87,6 +90,7 @@ export function SuggestTestsDialog({
       toast.success(`Đã thêm ${added.length} test`);
       setDrafts(null);
       setNotes([]);
+      setRejections([]);
       onClose();
     } catch (e) {
       toast.error(added.length ? `Đã thêm ${added.length} test, rồi gặp lỗi: ${errorMessage(e)}` : errorMessage(e));
@@ -155,7 +159,7 @@ export function SuggestTestsDialog({
             </select>
           </label>
           <label className="block space-y-1">
-            <span>Muốn tập trung vào (không bắt buộc)</span>
+            <span>Muốn tập trung vào (không bắt buộc, AI vẫn tuân theo đề bài trước)</span>
             <input
               className={inputClass}
               maxLength={300}
@@ -170,6 +174,22 @@ export function SuggestTestsDialog({
         </div>
       ) : (
         <div className="space-y-4 text-sm">
+          {rejections.length > 0 && (
+            <div role="alert" className="rounded-lg border border-mark-200 bg-mark-50 px-3 py-2 text-mark-700">
+              <p className="flex items-center gap-2 font-medium">
+                <CircleAlert className="h-4 w-4 shrink-0" />
+                AI không làm theo một phần yêu cầu của bạn vì trái với đề bài
+              </p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-10">
+                {rejections.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
+              <p className="mt-1 pl-6 text-xs text-mark-600">
+                Đề bài, dữ liệu vào, kết quả và ràng buộc luôn được ưu tiên. Nếu đề chưa đúng ý, hãy sửa đề trước rồi gợi ý lại.
+              </p>
+            </div>
+          )}
           {notes.length > 0 && (
             <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900">
               <p className="font-medium">AI lưu ý</p>
