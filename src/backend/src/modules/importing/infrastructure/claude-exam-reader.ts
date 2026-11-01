@@ -56,7 +56,7 @@ export class ClaudeExamReader extends SmartExamReader {
     const isPdf = file.originalName.toLowerCase().endsWith('.pdf');
     const source: Anthropic.Beta.BetaContentBlockParam = isPdf
       ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: file.buffer.toString('base64') } }
-      : { type: 'text', text: `Nội dung đề (trích từ file Word, bảng ghi dạng "ô | ô"; số mũ ghi dạng 10^6 hoặc 10^{18}, chỉ số dưới dạng a_i, công thức Word đã đổi sang dạng chữ như (a+b)/2, sqrt(n); đó là đúng nội dung gốc, không cần ghi chú kiểm tra):\n\n${extracted ? documentText(extracted) : ''}` };
+      : { type: 'text', text: `Nội dung đề (trích từ file Word hoặc do giáo viên dán vào, bảng ghi dạng "ô | ô"; số mũ ghi dạng 10^6 hoặc 10^{18}, chỉ số dưới dạng a_i, công thức Word đã đổi sang dạng chữ như (a+b)/2, sqrt(n); đó là đúng nội dung gốc, không cần ghi chú kiểm tra):\n\n${extracted ? documentText(extracted) : ''}` };
 
     const response = await this.claude.api!.beta.messages.parse({
       ...ClaudeClient.target(this.claude.models.examReader),

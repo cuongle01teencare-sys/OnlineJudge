@@ -9,6 +9,7 @@ import {
   IsIn,
   IsInt,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { DomainError } from '../../../shared/domain/domain-error.js';
@@ -34,6 +35,10 @@ class DraftBody {
   @IsArray() @IsString({ each: true }) warnings: string[];
 }
 
+class ParseTextBody {
+  @IsString() @MaxLength(100_000, { message: 'Nội dung dài quá 100.000 ký tự. Hãy chia thành nhiều lần.' }) text: string;
+}
+
 class ConfirmBody {
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(50) @ValidateNested({ each: true }) @Type(() => DraftBody)
   drafts: DraftBody[];
@@ -51,6 +56,12 @@ export class ImportsController {
     // Multer decodes the multipart filename as latin1; restore UTF-8 (Vietnamese names).
     const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
     return this.imports.parse({ originalName, mimeType: file.mimetype, buffer: file.buffer });
+  }
+
+  /** Same as `parse`, for exam text pasted by the teacher. */
+  @Post('parse-text') @HttpCode(200)
+  parseText(@Body() body: ParseTextBody) {
+    return this.imports.parseText(body.text);
   }
 
   @Post('confirm')

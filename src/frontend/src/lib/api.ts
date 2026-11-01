@@ -271,6 +271,7 @@ export const api = {
     fd.append('file', file);
     return request<ParsedExamDto>('POST', '/imports/parse', { body: fd });
   },
+  parseExamText: (text: string) => request<ParsedExamDto>('POST', '/imports/parse-text', { body: { text } }),
   confirmImport: (body: ImportProblemsRequest) =>
     request<ImportProblemsResponse>('POST', '/imports/confirm', { body }),
 

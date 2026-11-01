@@ -14,8 +14,10 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
+  ClipboardPaste,
   FileUp,
   Plus,
+  Sparkles,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -31,6 +33,7 @@ import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 const MAX_SIZE = 10 * 1024 * 1024;
+const MAX_TEXT = 100_000;
 
 interface DraftState extends ProblemDraftDto {
   include: boolean;
@@ -111,6 +114,46 @@ function Dropzone({ onFile, busy }: { onFile: (f: File) => void; busy: boolean }
         </>
       )}
     </div>
+  );
+}
+
+/** Exam text pasted instead of a file; read the same way as an uploaded document. */
+function PasteBox({ onSubmit, busy }: { onSubmit: (text: string) => void; busy: boolean }) {
+  const [text, setText] = useState('');
+  const tooLong = text.length > MAX_TEXT;
+  if (busy) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 rounded-panel border border-slate-200 bg-white px-6 py-16 text-center">
+        <Spinner className="h-8 w-8" />
+        <ParsingProgress />
+      </div>
+    );
+  }
+  return (
+    <Card className="space-y-3 p-4">
+      <p className="text-sm text-slate-600">
+        Dán nội dung đề (một hoặc nhiều bài) từ Word, trang web hay tin nhắn. AI sẽ tách từng bài và sắp xếp lại thành đề bài,
+        dữ liệu vào, kết quả, ràng buộc và ví dụ, giống như khi tải file lên.
+      </p>
+      <textarea
+        className={cn(inputClass, 'h-auto min-h-[16rem] py-2 font-mono text-sm')}
+        rows={14}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={'Bài 1. Tổng hai số\nCho hai số nguyên a, b. Tính a + b.\nDữ liệu vào: một dòng chứa a, b.\nKết quả: in ra a + b.\nVí dụ: ...'}
+        aria-label="Nội dung đề"
+      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className={cn('text-xs tabular-nums', tooLong ? 'text-mark-600' : 'text-slate-500')}>
+          {text.length.toLocaleString('vi-VN')} / {MAX_TEXT.toLocaleString('vi-VN')} ký tự
+          {tooLong && ' (quá dài, hãy chia thành nhiều lần)'}
+        </span>
+        <Button onClick={() => onSubmit(text)} disabled={!text.trim() || tooLong}>
+          <Sparkles className="h-4 w-4" />
+          Tái cấu trúc bằng AI
+        </Button>
+      </div>
+    </Card>
   );
 }
 
@@ -280,15 +323,25 @@ export default function ImportPage() {
   const [showRaw, setShowRaw] = useState(false);
   const [importing, setImporting] = useState(false);
   const [created, setCreated] = useState<{ id: string; title: string }[] | null>(null);
+  const [source, setSource] = useState<'file' | 'text'>('file');
 
   const onFile = async (f: File) => {
     setError(null);
     const ext = f.name.split('.').pop()?.toLowerCase();
     if (ext !== 'docx' && ext !== 'pdf') return setError('File này không đọc được. Hãy chọn file .docx hoặc .pdf.');
     if (f.size > MAX_SIZE) return setError('File lớn hơn 10MB. Hãy tách đề thành file nhỏ hơn rồi tải lại.');
+    await read(() => api.parseExam(f));
+  };
+
+  const onText = (text: string) => {
+    setError(null);
+    return read(() => api.parseExamText(text));
+  };
+
+  const read = async (load: () => Promise<ParsedExamDto>) => {
     setParsing(true);
     try {
-      const res = await api.parseExam(f);
+      const res = await load();
       setParsed(res);
       setDrafts(res.drafts.map((d, i) => ({ ...d, include: true, open: i === 0 })));
       setCreated(null);
@@ -334,13 +387,13 @@ export default function ImportPage() {
     <RequireRole roles={STAFF}>
       <Container>
         <PageHeader
-          title="Nhập đề từ file"
-          subtitle="Tải lên file đề (.docx/.pdf), kiểm tra các bài được tách tự động rồi xác nhận để thêm vào ngân hàng của bạn (ở chế độ riêng tư)."
+          title="Nhập đề"
+          subtitle="Tải lên file đề (.docx/.pdf) hoặc dán nội dung đề, kiểm tra các bài được tách tự động rồi xác nhận để thêm vào ngân hàng của bạn (ở chế độ riêng tư)."
           actions={
             parsed && (
               <Button variant="secondary" onClick={reset}>
                 <FileUp className="h-4 w-4" />
-                Chọn file khác
+                Nhập đề khác
               </Button>
             )
           }
@@ -376,7 +429,31 @@ export default function ImportPage() {
           </Card>
         ) : !parsed ? (
           <div className="space-y-3">
-            <Dropzone onFile={onFile} busy={parsing} />
+            <div role="tablist" aria-label="Cách nhập đề" className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
+              {(
+                [
+                  ['file', 'Tải file lên', FileUp],
+                  ['text', 'Dán nội dung', ClipboardPaste],
+                ] as const
+              ).map(([key, label, Icon]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={source === key}
+                  disabled={parsing}
+                  onClick={() => setSource(key)}
+                  className={cn(
+                    'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition',
+                    source === key ? 'bg-ink-600 text-white' : 'text-slate-600 hover:bg-slate-100',
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </button>
+              ))}
+            </div>
+            {source === 'file' ? <Dropzone onFile={onFile} busy={parsing} /> : <PasteBox onSubmit={onText} busy={parsing} />}
             {error && <InlineAlert>{error}</InlineAlert>}
           </div>
         ) : (

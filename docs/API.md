@@ -114,6 +114,7 @@ Staff only (students reach problems through sessions).
 | Method | Path | Who | Body | Response |
 |---|---|---|---|---|
 | POST | /imports/parse | staff | multipart/form-data, field `file` (.docx or .pdf, ≤ 10MB) | ParsedExamDto |
+| POST | /imports/parse-text | staff | `{ text }` (≤ 100,000 characters) | ParsedExamDto (`fileName` = "Nội dung đã dán") — the same reading as `parse`, for exam text pasted by the teacher ("Tái cấu trúc bằng AI"). 400 `import.empty_text` |
 | POST | /imports/confirm | staff | ImportProblemsRequest | ImportProblemsResponse (problems owned by the caller). 400 `import.file_io` (nothing imported) when a draft still reads or writes files |
 
 ## Problem set bank

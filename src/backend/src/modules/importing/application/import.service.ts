@@ -6,6 +6,8 @@ import { documentText, type ExamDocument } from '../domain/exam-document.js';
 import { ExamParser } from '../domain/exam-parser.js';
 import { DocumentReader, ProblemCatalogGateway, SmartExamReader, type UploadedFile } from './ports.js';
 
+const PASTED = 'Nội dung đã dán';
+
 @Injectable()
 export class ImportService {
   private readonly logger = new Logger(ImportService.name);
@@ -24,6 +26,21 @@ export class ImportService {
   async parse(file: UploadedFile): Promise<ParsedExamDto> {
     // The text layer may be empty (scanned PDF); that only matters if the AI reader is not used.
     const doc: ExamDocument | null = await this.reader.read(file).catch(() => null);
+    return this.extract(file, doc);
+  }
+
+  /** Step 1 for text pasted by the teacher instead of a file: same reading, same drafts. */
+  async parseText(text: string): Promise<ParsedExamDto> {
+    const value = text.replace(/\r\n?/g, '\n').trim();
+    assert(value, 'import.empty_text', 'Hãy dán nội dung đề vào ô trước.');
+    const doc: ExamDocument = {
+      fileName: PASTED,
+      blocks: value.split('\n').filter((line) => line.trim()).map((line) => ({ kind: 'paragraph', text: line })),
+    };
+    return this.extract({ originalName: PASTED, mimeType: 'text/plain', buffer: Buffer.from(value) }, doc);
+  }
+
+  private async extract(file: UploadedFile, doc: ExamDocument | null): Promise<ParsedExamDto> {
     const rawText = doc ? documentText(doc) : '';
 
     if (this.smartReader.available) {

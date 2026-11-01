@@ -12,6 +12,7 @@ Hệ thống chấm bài lập trình tự động cho lớp học:
   - Giới hạn ngôn ngữ, giới hạn số lần nộp mỗi bài.
   - Hiển thị kết quả cho học sinh: đầy đủ, chỉ điểm, hoặc ẩn đến khi phiên đóng. Giáo viên luôn thấy đầy đủ.
   - **Chấm lại** cả phiên hoặc một bài, và "Cập nhật đề từ ngân hàng & chấm lại" khi đã sửa test. Điểm và học bạ được tính lại theo kết quả mới.
+- **Dán nội dung đề**: ở trang Nhập đề, tab *Dán nội dung* nhận một đoạn văn (một hoặc nhiều bài); nút *Tái cấu trúc bằng AI* tách và sắp xếp thành từng bài giống như khi tải file lên.
 - **Đọc đề bằng AI** (khi có `ANTHROPIC_API_KEY`): Claude đọc thẳng file PDF (kể cả bố cục lộn xộn hoặc bản scan) hoặc nội dung Word để tách bài. Không có key hoặc AI lỗi thì dùng bộ đọc theo mẫu.
   Hệ thống chấm chỉ dùng đầu vào/đầu ra chuẩn. Đề kiểu "đọc từ file BAI1.INP, ghi ra file BAI1.OUT" vẫn giữ nguyên câu chữ của giáo viên, nhưng không lưu được cho tới khi sửa: cạnh mỗi mục (Đề bài, Dữ liệu vào, Kết quả, Ràng buộc) có nút **Dùng gợi ý** để chuyển sang câu đọc từ đầu vào chuẩn/in ra màn hình, tắt đi là quay lại nội dung gốc. Lưu ý của AI về đọc/ghi file được bỏ.
 - **Gợi ý test bằng AI**: ở tab Test của bài, bấm *Gợi ý bằng AI*. Claude đọc đề, các test hiện có và lời giải mẫu, đề xuất test biên/đặc biệt, rồi **chạy code** trong sandbox của Anthropic để tính output. Giáo viên xem, sửa và chọn test nào để thêm; test có output do AI tự tính (không chạy được code) được đánh dấu để kiểm tra lại.
