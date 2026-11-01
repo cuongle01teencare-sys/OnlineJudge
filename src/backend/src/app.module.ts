@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -23,6 +24,8 @@ import { SharedModule } from './shared/shared.module.js';
         url: config.getOrThrow<string>('DATABASE_URL'),
         autoLoadEntities: true,
         synchronize: config.get('DB_SYNC', 'false') === 'true',
+        // Hosted Postgres (e.g. Supabase) signs its certificate with its own CA: verify against that file.
+        ...(config.get<string>('DATABASE_SSL_CA') ? { ssl: { ca: readFileSync(config.get<string>('DATABASE_SSL_CA')!, 'utf8') } } : {}),
       }),
     }),
     SharedModule,
