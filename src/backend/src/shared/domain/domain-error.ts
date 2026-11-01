@@ -1,0 +1,35 @@
+export type DomainErrorKind = 'validation' | 'not_found' | 'forbidden' | 'conflict' | 'unauthorized';
+
+/**
+ * Errors raised by domain/application code. They carry no HTTP knowledge;
+ * the presentation layer maps `kind` to a status code.
+ */
+export class DomainError extends Error {
+  constructor(
+    readonly kind: DomainErrorKind,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+
+  static validation(code: string, message: string) {
+    return new DomainError('validation', code, message);
+  }
+  static notFound(code: string, message: string) {
+    return new DomainError('not_found', code, message);
+  }
+  static forbidden(code: string, message: string) {
+    return new DomainError('forbidden', code, message);
+  }
+  static conflict(code: string, message: string) {
+    return new DomainError('conflict', code, message);
+  }
+  static unauthorized(code: string, message: string) {
+    return new DomainError('unauthorized', code, message);
+  }
+}
+
+export function assert(condition: unknown, code: string, message: string): asserts condition {
+  if (!condition) throw DomainError.validation(code, message);
+}

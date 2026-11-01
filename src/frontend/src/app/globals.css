@@ -1,0 +1,281 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+/*
+ * Design tokens: "Vở ô li" (see DESIGN.md).
+ * paper #F5F7FB, rule #CBD5E6, ink #4A2FA0, graphite #232838, chalk #1F6B4A, mark #C8302A.
+ * The stock slate scale is redefined as blue-graphite so neutrals harmonise with the paper.
+ */
+@theme inline {
+  --font-sans: var(--font-ui), ui-sans-serif, system-ui, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-mono: var(--font-code), ui-monospace, Consolas, 'Liberation Mono', monospace;
+  --font-hand: var(--font-handwritten), 'Comic Sans MS', cursive;
+}
+
+@theme {
+  --color-paper: #f5f7fb;
+  --color-rule: #cbd5e6;
+  --color-ink: #4a2fa0;
+  --color-graphite: #232838;
+  --color-chalk: #1f6b4a;
+  --color-mark: #c8302a;
+
+  --color-ink-50: #f3f0fb;
+  --color-ink-100: #e6e0f6;
+  --color-ink-200: #cec2ee;
+  --color-ink-300: #ae9de2;
+  --color-ink-400: #8a73d2;
+  --color-ink-500: #6a50bd;
+  --color-ink-600: #4a2fa0;
+  --color-ink-700: #3d2687;
+  --color-ink-800: #321f6e;
+  --color-ink-900: #261857;
+
+  --color-chalk-50: #edf6f1;
+  --color-chalk-100: #d5ebdf;
+  --color-chalk-200: #a9d5be;
+  --color-chalk-300: #77bb98;
+  --color-chalk-400: #479e73;
+  --color-chalk-500: #2b8459;
+  --color-chalk-600: #1f6b4a;
+  --color-chalk-700: #19573d;
+  --color-chalk-800: #144531;
+  --color-chalk-900: #0f3425;
+
+  --color-mark-50: #fcefee;
+  --color-mark-100: #f8dad8;
+  --color-mark-200: #f0b3af;
+  --color-mark-300: #e5857f;
+  --color-mark-400: #d9574f;
+  --color-mark-500: #cf3e36;
+  --color-mark-600: #c8302a;
+  --color-mark-700: #a52722;
+  --color-mark-800: #831f1b;
+  --color-mark-900: #641815;
+
+  --color-slate-50: #f5f7fb;
+  --color-slate-100: #ecf0f7;
+  --color-slate-200: #dce3ef;
+  --color-slate-300: #cbd5e6;
+  --color-slate-400: #8e98ae;
+  --color-slate-500: #626c82;
+  --color-slate-600: #4b5366;
+  --color-slate-700: #383f50;
+  --color-slate-800: #2c3242;
+  --color-slate-900: #232838;
+
+  --radius-control: 6px;
+  --radius-panel: 10px;
+}
+
+html,
+body {
+  background: var(--color-paper);
+  color: var(--color-graphite);
+}
+
+/* The exercise-book grid (ô li): used on the auth page and behind the score mark only. */
+.grid-paper {
+  background-color: #fff;
+  background-image:
+    linear-gradient(to right, rgb(203 213 230 / 0.55) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(203 213 230 / 0.55) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* Visible keyboard focus everywhere. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+/* Score mark: the circle is drawn once when a verdict arrives. */
+.score-ring {
+  stroke-dasharray: 340;
+  stroke-dashoffset: 340;
+  animation: draw-ring 700ms cubic-bezier(0.6, 0.1, 0.3, 1) 120ms forwards;
+}
+.score-digits {
+  animation: ink-in 300ms ease-out both;
+}
+@keyframes draw-ring {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes ink-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px) rotate(-6deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-4deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .score-ring {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Markdown tweaks */
+.markdown {
+  --tw-prose-body: var(--color-graphite);
+  --tw-prose-headings: var(--color-graphite);
+  --tw-prose-links: var(--color-ink);
+  --tw-prose-bold: var(--color-graphite);
+  --tw-prose-code: var(--color-graphite);
+}
+.markdown pre {
+  background: var(--color-paper);
+  color: var(--color-graphite);
+  border: 1px solid var(--color-rule);
+}
+.markdown code::before,
+.markdown code::after {
+  content: none;
+}
+.markdown :not(pre) > code {
+  background: var(--color-slate-100);
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+  font-weight: 500;
+}
+.markdown table {
+  font-size: 0.9em;
+}
+.markdown .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Sample/test I/O blocks */
+.io-block {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.35rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ===================== Print ===================== */
+/*
+ * Exam paper / answer key. Vietnamese school papers are conventionally set in Times New Roman,
+ * so the printed sheet uses it (system font, full Vietnamese coverage). Black on white only.
+ */
+.print-sheet {
+  font-family: 'Times New Roman', Times, 'Liberation Serif', serif;
+  color: #000;
+  line-height: 1.5;
+}
+.print-sheet .markdown {
+  font-family: inherit;
+  --tw-prose-body: #000;
+  --tw-prose-headings: #000;
+  --tw-prose-bold: #000;
+  --tw-prose-code: #000;
+}
+.print-sheet .code-block,
+.print-sheet .io-block {
+  font-family: var(--font-mono);
+}
+.print-sheet .code-block {
+  background: #fff;
+  border-color: #9ca3af;
+}
+
+.print-only {
+  display: none;
+}
+
+@page {
+  size: A4;
+  margin: 18mm 16mm 18mm 16mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11.5pt;
+  }
+  .grid-paper {
+    background: #fff !important;
+  }
+  .no-print,
+  nav,
+  header.app-header,
+  button {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .print-page {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .print-problem + .print-problem {
+    break-before: page;
+    page-break-before: always;
+  }
+  .print-sheet {
+    font-size: 12pt;
+  }
+  .avoid-break,
+  .code-block tr,
+  .sample-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .code-block {
+    max-height: none !important;
+    overflow: visible !important;
+    background: #fff !important;
+    border-color: #999 !important;
+  }
+  .code-block .code-ln {
+    color: #777 !important;
+    border-color: #bbb !important;
+  }
+  .code-block .code-line {
+    color: #000 !important;
+  }
+  .markdown {
+    font-size: 11.5pt !important;
+    color: #000 !important;
+  }
+  .markdown pre {
+    background: #fff !important;
+    border-color: #999 !important;
+  }
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

@@ -1,0 +1,42 @@
+import type { BankScope, Difficulty } from '@oj/contracts';
+import type { Owner, Problem, Sharing, SourceRef } from './problem.js';
+
+export abstract class ProblemRepository {
+  abstract findById(id: string): Promise<Problem | null>;
+  abstract findByIds(ids: string[]): Promise<Problem[]>;
+  abstract nextSeq(): Promise<number>;
+  abstract save(problem: Problem): Promise<void>;
+  abstract delete(id: string): Promise<void>;
+}
+
+export interface ProblemListFilter {
+  scope: BankScope;
+  /** The viewer; `mine` means owned by this user. */
+  viewerId: string;
+  search?: string;
+  difficulty?: Difficulty;
+  tag?: string;
+  page: number;
+  pageSize: number;
+}
+
+export interface ProblemSummaryRow {
+  id: string;
+  seq: number;
+  title: string;
+  difficulty: Difficulty;
+  tags: string[];
+  timeLimitMs: number;
+  memoryLimitMb: number;
+  testCaseCount: number;
+  hasSolution: boolean;
+  owner: Owner;
+  sharing: Sharing;
+  copiedFrom: SourceRef | null;
+  createdAt: Date;
+}
+
+/** Read-side port for listing (CQRS-light: does not load whole aggregates). */
+export abstract class ProblemQueries {
+  abstract list(filter: ProblemListFilter): Promise<{ rows: ProblemSummaryRow[]; total: number }>;
+}
