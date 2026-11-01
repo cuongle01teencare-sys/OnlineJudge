@@ -4,6 +4,7 @@ import type { Actor } from '../../../shared/application/actor.js';
 import { assert } from '../../../shared/domain/domain-error.js';
 import { documentText, type ExamDocument } from '../domain/exam-document.js';
 import { ExamParser } from '../domain/exam-parser.js';
+import { stripExternalLinks } from '../../../shared/domain/external-links.js';
 import { DocumentReader, ProblemCatalogGateway, SmartExamReader, type UploadedFile } from './ports.js';
 
 const PASTED = 'Nội dung đã dán';
@@ -46,7 +47,7 @@ export class ImportService {
     if (this.smartReader.available) {
       try {
         const drafts = await this.smartReader.read(file, doc);
-        return { fileName: file.originalName, parser: 'AI', drafts: drafts.map(withoutFileHints), rawText };
+        return { fileName: file.originalName, parser: 'AI', drafts: drafts.map(cleanDraft), rawText };
       } catch (error) {
         this.logger.warn(`AI reader failed for ${file.originalName}, using the rule-based parser: ${(error as Error).message}`);
       }
@@ -54,7 +55,7 @@ export class ImportService {
 
     assert(doc && rawText.trim().length > 0, 'import.empty_document',
       'Không đọc được chữ trong tài liệu (có thể là PDF dạng ảnh scan). Đọc đề bằng AI sẽ xử lý được loại tệp này.');
-    return { fileName: file.originalName, parser: 'BASIC', drafts: this.parser.parse(doc).map(withoutFileHints), rawText };
+    return { fileName: file.originalName, parser: 'BASIC', drafts: this.parser.parse(doc).map(cleanDraft), rawText };
   }
 
   /** Step 2: create problems from the reviewed drafts; samples become sample test cases. */
@@ -90,9 +91,21 @@ export class ImportService {
 }
 
 /**
- * The judge uses standard input/output only. The teacher's wording is kept as read (the review screen offers
- * the standard-I/O rewrite and refuses file wording); hints about files would only repeat that, so they go.
+ * What every read draft goes through, whichever reader produced it:
+ * - links to other places (the original problem elsewhere, group invitations...) are removed from the text;
+ * - the teacher's file wording is kept (the review screen offers the standard-I/O rewrite and refuses file
+ *   wording), so hints about files would only repeat that, and hints about links point at removed text: both go.
  */
-function withoutFileHints(draft: ProblemDraftDto): ProblemDraftDto {
-  return { ...draft, warnings: draft.warnings.filter((w) => !isAboutFileIo(w)) };
+function cleanDraft(draft: ProblemDraftDto): ProblemDraftDto {
+  const strip = (text: string) => stripExternalLinks(text).text;
+  return {
+    ...draft,
+    statement: strip(draft.statement),
+    inputFormat: strip(draft.inputFormat),
+    outputFormat: strip(draft.outputFormat),
+    constraints: strip(draft.constraints),
+    warnings: draft.warnings.filter((w) => !isAboutFileIo(w) && !LINK_HINT.test(w)),
+  };
 }
+
+const LINK_HINT = /https?:\/\/|www\.|đường dẫn|liên kết|\blinks?\b|\burl\b/i;

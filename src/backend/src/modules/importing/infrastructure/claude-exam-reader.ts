@@ -38,7 +38,12 @@ Với mỗi bài:
 - difficulty: theo đề nếu có ghi (difficultyStated = true); nếu không thì tự ước lượng và đặt difficultyStated = false.
 - notes: những điểm giáo viên nên kiểm tra lại (hình vẽ không đọc được, ví dụ bị thiếu, chỗ mờ...), bằng tiếng Việt, ngắn gọn.
   Không ghi chú gì về việc đọc/ghi file.
-Bỏ qua phần đầu đề (tên kỳ thi, thời gian làm bài cả đề, bảng tổng hợp tên file).`;
+Bỏ qua phần đầu đề (tên kỳ thi, thời gian làm bài cả đề, bảng tổng hợp tên file).
+Bỏ hẳn, không chép vào bất kỳ trường nào và không nhắc tới trong notes:
+- mọi đường dẫn ra ngoài và câu chỉ để dẫn tới nơi khác (ví dụ "Link problem : https://leetcode.com/...", "Nguồn: Codeforces", "Xem lời giải tại...");
+- lời mời tham gia nhóm, kênh, trang (Zalo, Facebook, Telegram, Discord...), quảng cáo, số điện thoại liên hệ;
+- nội dung tuyên truyền tư tưởng lệch lạc, kích động, hoặc kêu gọi hành vi vi phạm pháp luật.
+Chỉ giữ phần thuộc về bài tập: câu chuyện của đề, yêu cầu, dữ liệu vào/ra, ràng buộc, ví dụ.`;
 
 /** Claude reads the original document: PDF as a document block (layout and scans included), DOCX as extracted text. */
 @Injectable()

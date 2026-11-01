@@ -13,6 +13,8 @@ Quy tắc chung:
 - Viết bằng Markdown, công thức và giới hạn dạng LaTeX $...$ (ví dụ $1 \\le n \\le 10^6$).
 - Hệ thống chấm chỉ dùng đầu vào chuẩn (bàn phím) và đầu ra chuẩn (màn hình), không dùng file: không nhắc tới tên file, .INP/.OUT hay "tên file chương trình".
 - text chỉ chứa nội dung của mục được yêu cầu, không lặp tiêu đề mục.
+- Bỏ hẳn mọi đường dẫn ra ngoài (ví dụ "Link problem : https://...", nguồn từ trang khác), lời mời tham gia nhóm/kênh, quảng cáo,
+  nội dung tuyên truyền lệch lạc hay kêu gọi vi phạm pháp luật; không nhắc tới chúng trong notes.
 Theo từng mục:
 - Đề bài (statement): kể lại yêu cầu rõ ràng, mạch lạc; giữ câu chuyện của đề; không chép phần dữ liệu vào, kết quả, ràng buộc, ví dụ.
 - Dữ liệu vào (inputFormat): mô tả từng dòng của đầu vào (dòng 1 gồm..., dòng 2 gồm...), kiểu và ý nghĩa từng giá trị.

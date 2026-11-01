@@ -9,7 +9,7 @@ import {
   type ProblemDraftContent,
   type ProblemTextField,
 } from '@oj/contracts';
-import { AlertTriangle, Wand2 } from 'lucide-react';
+import { AlertTriangle, RotateCcw, Wand2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -26,12 +26,16 @@ export interface SectionSuggestion {
   loading: boolean;
   notes: string[];
   toggle: (on: boolean) => void;
+  /** Ask the AI for a different version (only while on). */
+  regenerate?: () => void;
 }
 
 /**
- * Per-section AI suggestions for a problem being written (`content.samples` gives the AI the examples). Turning a section on asks the AI and swaps in its
- * version; turning it off puts the teacher's own text back. `apply` must merge into the latest state,
- * since several sections may answer at once (the "whole problem" switch).
+ * Per-section AI suggestions for a problem being written (`content.samples` gives the AI the examples).
+ * Turning a section on swaps in the AI's version; turning it off puts the teacher's own text back.
+ * Suggestions are remembered per content: turning a section on again while the teacher's text is unchanged
+ * reuses the last suggestion instead of asking the AI again; "Viết lại" asks for a new one on purpose.
+ * `apply` must merge into the latest state, since several sections may answer at once (the "whole problem" switch).
  */
 export function useSectionSuggestions(
   content: ProblemDraftContent,
@@ -45,8 +49,33 @@ export function useSectionSuggestions(
   const [notes, setNotes] = useState<Partial<Record<Section, string[]>>>({});
   const latest = useRef(content);
   latest.current = content;
+  const originalsRef = useRef(originals);
+  originalsRef.current = originals;
+  // Suggestion per (section, teacher's content): same content, same answer, no new AI call.
+  const cache = useRef(new Map<string, { text: string; notes: string[] }>());
 
   const isOn = (s: Section) => s in originals;
+  /** The problem as the teacher wrote it: sections showing a suggestion count with their own text. */
+  const teacherContent = (): ProblemDraftContent => ({ ...latest.current, ...originalsRef.current });
+  const keyOf = (s: Section, problem: ProblemDraftContent) => JSON.stringify([s, problem]);
+
+  const ask = async (s: Section, fresh: boolean) => {
+    const problem = teacherContent();
+    const key = keyOf(s, problem);
+    const known = fresh ? undefined : cache.current.get(key);
+    if (known) return { problem, ...known };
+    setLoading((l) => ({ ...l, [s]: true }));
+    try {
+      const res = await api.suggestProblemSection({ section: s, problem });
+      cache.current.set(key, { text: res.text, notes: res.notes });
+      return { problem, ...res };
+    } catch (e) {
+      toast.error(`${ProblemTextFieldLabels[s]}: ${errorMessage(e)}`);
+      return null;
+    } finally {
+      setLoading((l) => ({ ...l, [s]: false }));
+    }
+  };
 
   const toggle = async (s: Section, on: boolean) => {
     if (on === isOn(s) || loading[s]) return;
@@ -56,18 +85,19 @@ export function useSectionSuggestions(
       setNotes(({ [s]: _, ...rest }) => rest);
       return;
     }
-    setLoading((l) => ({ ...l, [s]: true }));
-    const before = latest.current[s];
-    try {
-      const res = await api.suggestProblemSection({ section: s, problem: latest.current });
-      apply({ [s]: res.text });
-      setOriginals((o) => ({ ...o, [s]: before }));
-      setNotes((n) => ({ ...n, [s]: res.notes }));
-    } catch (e) {
-      toast.error(`${ProblemTextFieldLabels[s]}: ${errorMessage(e)}`);
-    } finally {
-      setLoading((l) => ({ ...l, [s]: false }));
-    }
+    const res = await ask(s, false);
+    if (!res) return;
+    apply({ [s]: res.text });
+    setOriginals((o) => ({ ...o, [s]: res.problem[s] }));
+    setNotes((n) => ({ ...n, [s]: res.notes }));
+  };
+
+  const regenerate = async (s: Section) => {
+    if (!isOn(s) || loading[s]) return;
+    const res = await ask(s, true);
+    if (!res) return;
+    apply({ [s]: res.text });
+    setNotes((n) => ({ ...n, [s]: res.notes }));
   };
 
   const of = (s: Section): SectionSuggestion => ({
@@ -75,6 +105,7 @@ export function useSectionSuggestions(
     loading: !!loading[s],
     notes: notes[s] ?? [],
     toggle: (on) => void toggle(s, on),
+    regenerate: () => void regenerate(s),
   });
 
   return {
@@ -100,32 +131,45 @@ export function SuggestionSwitch({
   text?: string;
   className?: string;
 }) {
-  const { on, loading, toggle } = suggestion;
+  const { on, loading, toggle, regenerate } = suggestion;
   return (
-    <label className={cn('flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700', className)}>
-      <button
-        type="button"
-        role="switch"
-        aria-label={label}
-        aria-checked={on}
-        aria-busy={loading}
-        disabled={loading}
-        onClick={() => toggle(!on)}
-        className={cn(
-          'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-wait',
-          on ? 'bg-chalk-600' : 'bg-slate-300',
-        )}
-      >
-        <span
+    <span className={cn('flex items-center gap-3', className)}>
+      <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
+        <button
+          type="button"
+          role="switch"
+          aria-label={label}
+          aria-checked={on}
+          aria-busy={loading}
+          disabled={loading}
+          onClick={() => toggle(!on)}
           className={cn(
-            'inline-block h-4 w-4 rounded-full bg-white transition-transform',
-            on ? 'translate-x-[18px]' : 'translate-x-0.5',
+            'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-wait',
+            on ? 'bg-chalk-600' : 'bg-slate-300',
           )}
-        />
-      </button>
-      {loading ? <Spinner className="h-3.5 w-3.5" /> : <Wand2 className="h-3.5 w-3.5 text-ink-600" />}
-      {loading ? 'AI đang viết…' : text}
-    </label>
+        >
+          <span
+            className={cn(
+              'inline-block h-4 w-4 rounded-full bg-white transition-transform',
+              on ? 'translate-x-[18px]' : 'translate-x-0.5',
+            )}
+          />
+        </button>
+        {loading ? <Spinner className="h-3.5 w-3.5" /> : <Wand2 className="h-3.5 w-3.5 text-ink-600" />}
+        {loading ? 'AI đang viết…' : text}
+      </label>
+      {on && !loading && regenerate && (
+        <button
+          type="button"
+          onClick={regenerate}
+          className="flex items-center gap-1 text-xs text-ink-600 hover:underline"
+          title="Nhờ AI viết một phiên bản khác"
+        >
+          <RotateCcw className="h-3 w-3" />
+          Viết lại
+        </button>
+      )}
+    </span>
   );
 }
 

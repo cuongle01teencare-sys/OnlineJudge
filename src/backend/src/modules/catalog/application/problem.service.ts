@@ -19,6 +19,7 @@ import type {
 import type { Actor } from '../../../shared/application/actor.js';
 import { EventPublisher } from '../../../shared/application/event-publisher.js';
 import { DomainError } from '../../../shared/domain/domain-error.js';
+import { stripExternalLinks } from '../../../shared/domain/external-links.js';
 import { Problem, ResourceLimits, Sharing, Solution } from '../domain/problem.js';
 import { ProblemQueries, ProblemRepository, type ProblemListFilter } from '../domain/problem.repository.js';
 import { toDetailDto, toSummaryDto, toTestCaseDto } from './problem.mapper.js';
@@ -199,7 +200,9 @@ export class ProblemService {
     }
     try {
       const { text, notes } = await this.writer.write(section, problem);
-      return { text: hasFileIo(text, side) ? toStandardIo(text, side) : text, notes };
+      // Neither file input/output nor links to other places come back, whatever the model wrote.
+      const clean = stripExternalLinks(text).text;
+      return { text: hasFileIo(clean, side) ? toStandardIo(clean, side) : clean, notes };
     } catch (error) {
       this.logger.warn(`Section rewrite (${section}) failed: ${(error as Error).message}`);
       if (hasFileIo(current, side)) return ruleBased();
