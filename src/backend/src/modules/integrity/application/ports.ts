@@ -20,6 +20,8 @@ export abstract class SubmissionSource {
 }
 
 export interface SessionCheckInfo {
+  /** The teacher who gave the session. */
+  ownerId: string;
   checkPlagiarism: boolean;
   checkAiUsage: boolean;
   sessionTitle: string;

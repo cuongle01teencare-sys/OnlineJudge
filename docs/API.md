@@ -23,6 +23,7 @@ Roles: `ADMIN` (exactly one, seeded from env), `TEACHER` (invited by admin by em
 | POST | /auth/invitations/accept | public | AcceptInvitationRequest | AuthResponse (account created, role TEACHER) |
 | GET | /users | ADMIN | – | UserDto[] |
 | DELETE | /users/:id | ADMIN | – | 204 (cannot delete admin) |
+| PUT | /users/:id/vip | ADMIN | SetVipRequest `{ vip }` | UserDto — teachers only. AI features (`/problems/suggest-*`, `/problems/:id/test-cases/suggest`, AI exam reading in `/imports/parse*`, the session `checkAiUsage` setting) are for ADMIN and VIP teachers; others get 403 `ai.vip_required` (imports fall back to the rule-based parser). |
 | GET | /users/invitations | ADMIN | – | InvitationDto[] (pending teacher invitations) |
 | POST | /users/invitations | ADMIN | InviteTeacherRequest | InvitationDto — email with link `${FRONTEND_URL}/invite?id=<id>&code=<code>` |
 | POST | /users/invitations/:id/resend | ADMIN | – | InvitationDto (new code, old link stops working; 1-minute cooldown) |
@@ -162,6 +163,8 @@ ACTIVE and the user is a current student of it or its manager. Public sessions: 
 |---|---|---|---|---|
 | POST | /sessions/:id/start | participant | – | SessionDto (idempotent; timer starts once) |
 | POST | /sessions/:id/refresh | manager | – | SessionDto — re-freezes problems from their current bank version (keys/points kept). Follow with a rejudge |
+| GET | /sessions/:id/sync | manager | – | SessionSyncPreviewDto — what syncing with the source set would change (added/removed problems, order, points, content); nothing saved. 400 for sessions given from a single problem |
+| POST | /sessions/:id/sync | manager | – | SessionSyncResultDto — makes the session match its source set. Kept problems keep their key, removed keys are never reused (their submissions stay but stop counting and are skipped by rejudges). Follow with a rejudge of `changes.contentChanged` |
 | POST | /sessions/:id/rejudge | manager | RejudgeRequest | RejudgeResponse — every submission (or of one problem) is judged again with the session's current tests; scores and học bạ are rebuilt from the new results |
 
 ## Submissions (judging)

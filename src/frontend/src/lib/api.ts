@@ -38,6 +38,8 @@ import type {
   ResendCodeRequest,
   ResetPasswordRequest,
   SessionAudience,
+  SessionSyncPreviewDto,
+  SessionSyncResultDto,
   SessionDto,
   SessionProblemDto,
   SessionResultsDto,
@@ -206,6 +208,7 @@ export const api = {
   // Users (admin)
   listUsers: () => request<UserDto[]>('GET', '/users'),
   deleteUser: (id: string) => request<void>('DELETE', `/users/${id}`),
+  setUserVip: (id: string, vip: boolean) => request<UserDto>('PUT', `/users/${id}/vip`, { body: { vip } }),
   listInvitations: () => request<InvitationDto[]>('GET', '/users/invitations'),
   inviteTeacher: (body: InviteTeacherRequest) => request<InvitationDto>('POST', '/users/invitations', { body }),
   resendInvitation: (id: string) => request<InvitationDto>('POST', `/users/invitations/${id}/resend`),
@@ -308,6 +311,8 @@ export const api = {
   getSessionResults: (id: string) => request<SessionResultsDto>('GET', `/sessions/${id}/results`),
   startSession: (id: string) => request<SessionDto>('POST', `/sessions/${id}/start`),
   refreshSession: (id: string) => request<SessionDto>('POST', `/sessions/${id}/refresh`),
+  previewSessionSync: (id: string) => request<SessionSyncPreviewDto>('GET', `/sessions/${id}/sync`),
+  syncSession: (id: string) => request<SessionSyncResultDto>('POST', `/sessions/${id}/sync`),
   rejudgeSession: (id: string, body: RejudgeRequest = {}) =>
     request<RejudgeResponse>('POST', `/sessions/${id}/rejudge`, { body }),
 

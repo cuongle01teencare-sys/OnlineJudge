@@ -27,14 +27,14 @@ export class ProblemsController {
 
   /** AI rewrite of one section of the problem being written (saved or not); nothing is saved. */
   @Post('suggest-section') @HttpCode(200)
-  suggestSection(@Body() body: SuggestSectionBody) {
-    return this.problems.suggestSection(body);
+  suggestSection(@CurrentActor() actor: Actor, @Body() body: SuggestSectionBody) {
+    return this.problems.suggestSection(actor, body);
   }
 
   /** AI test suggestions for a problem not saved yet; nothing is saved. */
   @Post('suggest-tests') @HttpCode(200)
-  suggestDraftTests(@Body() body: SuggestDraftTestsBody) {
-    return this.problems.suggestDraftTests(body);
+  suggestDraftTests(@CurrentActor() actor: Actor, @Body() body: SuggestDraftTestsBody) {
+    return this.problems.suggestDraftTests(actor, body);
   }
 
   @Get(':id')

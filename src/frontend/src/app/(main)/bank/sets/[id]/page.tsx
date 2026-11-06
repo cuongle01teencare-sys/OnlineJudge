@@ -173,24 +173,39 @@ export default function BankSetPage() {
                 <EmptyState title="Đề chưa có bài nào" />
               ) : (
                 <ol className="divide-y divide-slate-100">
-                  {items.map((it, idx) => (
-                    <li key={it.problemId}>
-                      <Link
-                        href={`/bank/problems/${it.problemId}`}
-                        className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3 hover:bg-slate-50"
-                      >
+                  {items.map((it, idx) => {
+                    // '?' = deleted, or not public for this viewer: there is no page to open.
+                    const unavailable = it.problemCode === '?';
+                    const row = (
+                      <>
                         <span className="w-12 text-sm font-semibold text-slate-500 tabular-nums">Bài {idx + 1}</span>
                         <div className="min-w-0 flex-1">
-                          <div className="font-medium text-slate-900">{it.problemTitle}</div>
-                          <div className="flex items-center gap-2 text-xs text-slate-500">
-                            <span className="tabular-nums">{it.problemCode}</span>
-                            <DifficultyBadge difficulty={it.difficulty} />
+                          <div className={unavailable ? 'font-medium text-slate-400 italic' : 'font-medium text-slate-900'}>
+                            {it.problemTitle}
                           </div>
+                          {!unavailable && (
+                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                              <span className="tabular-nums">{it.problemCode}</span>
+                              <DifficultyBadge difficulty={it.difficulty} />
+                            </div>
+                          )}
                         </div>
                         <span className="text-sm text-slate-600 tabular-nums">{it.points} điểm</span>
-                      </Link>
-                    </li>
-                  ))}
+                      </>
+                    );
+                    const rowClass = 'flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3';
+                    return (
+                      <li key={it.problemId}>
+                        {unavailable ? (
+                          <div className={rowClass}>{row}</div>
+                        ) : (
+                          <Link href={`/bank/problems/${it.problemId}`} className={`${rowClass} hover:bg-slate-50`}>
+                            {row}
+                          </Link>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ol>
               )}
             </Card>

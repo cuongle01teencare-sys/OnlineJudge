@@ -14,6 +14,7 @@ import { api } from '@/lib/api';
 import { isMuted, playChime, setMuted, unlockAudio, type ChimeKind } from '@/lib/chime';
 import { FeedbackLabels, formatClock, integritySummary, isExamLike, settingsSummary, TEST_PRESET } from '@/lib/exam';
 import { cn, formatDateTime } from '@/lib/utils';
+import { useCanUseAi, VipOnly } from './ai-access';
 import { useToast } from './toast';
 import { Button, ConfirmDialog, inputClass } from './ui';
 
@@ -27,6 +28,7 @@ export function SessionSettingsFields({
   value: SessionSettingsDto;
   onChange: (v: SessionSettingsDto) => void;
 }) {
+  const canUseAi = useCanUseAi();
   const [open, setOpen] = useState(() => isExamLike(value) || value.checkPlagiarism || value.checkAiUsage);
   const set = <K extends keyof SessionSettingsDto>(k: K, v: SessionSettingsDto[K]) => onChange({ ...value, [k]: v });
   const allLangs = value.allowedLanguages.length === 0;
@@ -197,10 +199,13 @@ export function SessionSettingsFields({
                   type="checkbox"
                   className="mt-1"
                   checked={value.checkAiUsage}
+                  // Regular accounts may turn an existing check off, never on.
+                  disabled={!canUseAi && !value.checkAiUsage}
                   onChange={(e) => set('checkAiUsage', e.target.checked)}
                 />
                 <span>
                   <span className="font-medium">Kiểm tra dùng AI</span>
+                  {!canUseAi && <VipOnly className="ml-2" />}
                   <span className="block text-xs text-slate-500">
                     Claude xem từng bài nộp. Cần khóa API trên máy chủ và tốn một khoản phí nhỏ.
                   </span>

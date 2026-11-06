@@ -2,12 +2,13 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CatalogModule } from '../catalog/catalog.module.js';
 import { ClassroomModule } from '../classroom/classroom.module.js';
+import { IdentityModule } from '../identity/identity.module.js';
 import { ClassAccess, LearningRecordStore, ProblemCatalog } from './application/ports.js';
 import { ProblemSetService } from './application/problem-set.service.js';
 import { SessionFacade } from './application/session.facade.js';
 import { SessionService } from './application/session.service.js';
 import { AttemptRepository, ProblemSetRepository, SessionRepository } from './domain/repositories.js';
-import { CatalogProblemCatalog, ClassroomClassAccess } from './infrastructure/adapters.js';
+import { CatalogProblemCatalog, ClassroomClassAccess, PublicSetsKeepProblemsPublic } from './infrastructure/adapters.js';
 import { TypeOrmLearningRecordStore } from './infrastructure/learning-record.store.js';
 import {
   LearningProgressOrmEntity,
@@ -36,6 +37,7 @@ import { ProblemSetsController, ProgressController, SessionsController } from '.
     ]),
     CatalogModule,
     ClassroomModule,
+    IdentityModule,
   ],
   controllers: [ProblemSetsController, SessionsController, ProgressController],
   providers: [
@@ -48,6 +50,7 @@ import { ProblemSetsController, ProgressController, SessionsController } from '.
     { provide: LearningRecordStore, useClass: TypeOrmLearningRecordStore },
     { provide: ProblemCatalog, useClass: CatalogProblemCatalog },
     { provide: ClassAccess, useClass: ClassroomClassAccess },
+    PublicSetsKeepProblemsPublic,
   ],
   exports: [SessionFacade],
 })

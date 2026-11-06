@@ -11,9 +11,12 @@ import type {
   SessionResultsDto,
   SessionSettingsDto,
   SessionState,
+  SessionSyncPreviewDto,
+  SessionSyncResultDto,
   UpdateSessionRequest,
 } from '@oj/contracts';
 import { isStaff, type Actor } from '../../../shared/application/actor.js';
+import { AiAccess } from '../../../shared/application/ai-access.js';
 import { DomainError } from '../../../shared/domain/domain-error.js';
 import { CLASS_PURGED, type ClassPurgedEvent } from '../../classroom/classroom.events.js';
 import {
@@ -23,7 +26,17 @@ import {
   type SubmissionJudgedEvent,
 } from '../../judging/judging.events.js';
 import { AttemptRepository, SessionRepository } from '../domain/repositories.js';
-import { assignmentKeyOf, Attempt, Session, SessionSettings, TimeWindow, type ResultVisibility } from '../domain/session.js';
+import {
+  assignmentKeyOf,
+  Attempt,
+  isEmptySync,
+  Session,
+  SessionSettings,
+  TimeWindow,
+  type ResultVisibility,
+  type SessionSyncPlan,
+  type SetItemSnapshot,
+} from '../domain/session.js';
 import { ClassAccess, LearningRecordStore, ProblemCatalog, type ClassInfo, type RecordProgress } from './ports.js';
 import { ProblemSetService } from './problem-set.service.js';
 
@@ -54,6 +67,8 @@ export interface JudgeTarget {
 }
 
 export interface IntegrityContext {
+  /** The teacher who gave the session: the AI-usage check runs only while their account may use AI. */
+  ownerId: string;
   checkPlagiarism: boolean;
   checkAiUsage: boolean;
   sessionTitle: string;
@@ -70,6 +85,7 @@ export class SessionService {
     private readonly problems: ProblemCatalog,
     private readonly classes: ClassAccess,
     private readonly record: LearningRecordStore,
+    private readonly ai: AiAccess,
   ) {}
 
   // ---------- Queries ----------
@@ -260,6 +276,7 @@ export class SessionService {
     const existing = await this.sessions.findByAssignmentKey(assignmentKey);
     if (existing) throw await this.alreadyAssigned(existing);
 
+    if (input.settings?.checkAiUsage) await this.ai.ensureAllowed(actor);
     const snapshots = await this.problems.snapshot(actor, items.map((i) => i.problemId));
     if (input.source.kind === 'PROBLEM') title = snapshots[0].title;
 
@@ -303,6 +320,8 @@ export class SessionService {
   async update(actor: Actor, id: string, input: UpdateSessionRequest): Promise<SessionDto> {
     const session = await this.load(id);
     await this.ensureManage(actor, session);
+    // Turning the AI-usage check on needs AI; a check already on may stay (it only runs while the owner may use AI).
+    if (input.settings.checkAiUsage && !session.snapshot.settings.checkAiUsage) await this.ai.ensureAllowed(actor);
     session.revise(input.title, input.description, windowOf(input.opensAt, input.closesAt), SessionSettings.of(input.settings));
     await this.sessions.save(session);
     await this.putRecordSession(session);
@@ -328,6 +347,67 @@ export class SessionService {
     if (!access.isParticipantNow) throw this.cannotSubmit(access);
     if (!(await this.attempts.find(id, actor.id))) await this.attempts.save(Attempt.start(session, actor.id));
     return (await this.dtos(actor, [session]))[0];
+  }
+
+  /** What syncing a session given from a set with that set (as it is in the bank now) would change. */
+  async previewSync(actor: Actor, id: string): Promise<SessionSyncPreviewDto> {
+    const session = await this.load(id);
+    await this.ensureManage(actor, session);
+    const { setId, setTitle, items } = await this.currentSetItems(actor, session);
+    return this.syncDto(session, setId, setTitle, session.planSync(items));
+  }
+
+  /**
+   * Makes the session match its source set (problems, order, points, content). Problems removed keep their
+   * submissions in students' history but no longer count. The caller rejudges `changes.contentChanged`.
+   */
+  async sync(actor: Actor, id: string): Promise<SessionSyncResultDto> {
+    const session = await this.load(id);
+    await this.ensureManage(actor, session);
+    const { setId, setTitle, items } = await this.currentSetItems(actor, session);
+    const before = session.planSync(items);
+    if (isEmptySync(before)) {
+      throw DomainError.conflict('assessment.nothing_to_sync', 'Phiên đã giống đề gốc, không có gì để đồng bộ.');
+    }
+    // Counted before the sync, while the removed problems are still in the session.
+    const changes = await this.syncDto(session, setId, setTitle, before);
+    session.syncWith(items);
+    await this.sessions.save(session);
+    await this.putRecordSession(session);
+    return { session: (await this.dtos(actor, [session]))[0], changes };
+  }
+
+  private async currentSetItems(actor: Actor, session: Session): Promise<{ setId: string; setTitle: string; items: SetItemSnapshot[] }> {
+    const setId = session.snapshot.sourceSetId;
+    if (!setId) {
+      throw DomainError.validation('assessment.not_from_set', 'Phiên này được giao từ một bài lẻ, không có đề gốc để đồng bộ.');
+    }
+    let set;
+    try {
+      set = await this.sets.loadForSession(actor, setId);
+    } catch (error) {
+      if (error instanceof DomainError && error.code === 'assessment.set_not_found') {
+        throw DomainError.notFound('assessment.set_gone', 'Đề gốc của phiên đã bị xóa hoặc không thuộc ngân hàng của bạn nên không đồng bộ được.');
+      }
+      throw error;
+    }
+    const s = set.snapshot;
+    const snapshots = await this.problems.snapshot(actor, s.items.map((i) => i.problemId));
+    return { setId, setTitle: s.title, items: snapshots.map((content, i) => ({ content, points: s.items[i].points })) };
+  }
+
+  private async syncDto(session: Session, setId: string, setTitle: string, plan: SessionSyncPlan): Promise<SessionSyncPreviewDto> {
+    const progress = plan.removed.length ? await this.record.progressOfSession(session.id) : [];
+    return {
+      setId,
+      setTitle,
+      ...plan,
+      removed: plan.removed.map((r) => ({
+        ...r,
+        studentsWithSubmissions: new Set(progress.filter((p) => p.problemKey === r.key).map((p) => p.userId)).size,
+      })),
+      hasChanges: !isEmptySync(plan),
+    };
   }
 
   /** Re-freezes the session's problems from their current bank version (the caller then rejudges). */
@@ -360,18 +440,23 @@ export class SessionService {
     return this.judgeData(session, key, access.canManage);
   }
 
-  /** Current test data of a session problem, without permission checks (used for rejudging). */
-  async judgeTarget(sessionId: string, key: string): Promise<JudgeTarget> {
-    return this.judgeData(await this.load(sessionId), key, true);
+  /**
+   * Current test data of a session problem, without permission checks (used for rejudging).
+   * null when the session no longer has that problem (removed by a sync): its submissions are not rejudged.
+   */
+  async judgeTarget(sessionId: string, key: string): Promise<JudgeTarget | null> {
+    const session = await this.load(sessionId);
+    return session.findProblem(key) ? this.judgeData(session, key, true) : null;
   }
 
   /** What the integrity checks need about one session problem; null if the session is gone. */
   async integrityContext(sessionId: string, key: string): Promise<IntegrityContext | null> {
     const session = await this.sessions.findById(sessionId);
-    if (!session) return null;
-    const { settings, title } = session.snapshot;
-    const p = session.problem(key);
+    const p = session?.findProblem(key);
+    if (!session || !p) return null;
+    const { settings, title, createdBy } = session.snapshot;
     return {
+      ownerId: createdBy.id,
       checkPlagiarism: settings.checkPlagiarism,
       checkAiUsage: settings.checkAiUsage,
       sessionTitle: title,

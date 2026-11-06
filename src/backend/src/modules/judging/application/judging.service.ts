@@ -83,17 +83,21 @@ export class JudgingService {
     const event: RejudgeStartedEvent = { name: REJUDGE_STARTED, occurredAt: new Date(), sessionId, problemKey: key };
     await this.events.publish([event]);
 
-    const targets = new Map<string, SubmissionTarget>();
+    const targets = new Map<string, SubmissionTarget | null>();
+    let queued = 0;
     for (const submission of submissions) {
       const k = submission.snapshot.problemKey;
       if (!targets.has(k)) targets.set(k, await this.sessions.judgeTarget(sessionId, k));
-      const target = targets.get(k)!;
+      const target = targets.get(k);
+      // A problem removed from the session (sync with its set): its submissions keep their last result.
+      if (!target) continue;
       submission.rejudge(totalPoints(target));
       await this.submissions.save(submission);
       await this.enqueue(submission, target);
+      queued++;
     }
-    this.logger.log(`Rejudging ${submissions.length} submissions of session ${sessionId}${key ? ` (problem ${key})` : ''}`);
-    return { queued: submissions.length };
+    this.logger.log(`Rejudging ${queued} submissions of session ${sessionId}${key ? ` (problem ${key})` : ''}`);
+    return { queued };
   }
 
   /** Applies a message coming back from the judge engine; results of an older judge run are ignored. */

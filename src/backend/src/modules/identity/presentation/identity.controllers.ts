@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
-import { IsEmail, IsOptional, IsString, IsUUID, Length, Matches, MaxLength, MinLength, ValidateIf } from 'class-validator';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
+import { IsBoolean, IsEmail, IsOptional, IsString, IsUUID, Length, Matches, MaxLength, MinLength, ValidateIf } from 'class-validator';
 import type { Actor } from '../../../shared/application/actor.js';
 import { CurrentActor, Public, Roles } from '../../../shared/presentation/decorators.js';
 import { AccountService } from '../application/account.service.js';
@@ -41,6 +41,10 @@ class InviteTeacherBody {
   @IsEmail({}, EMAIL_MSG) email: string;
   @IsString() @Length(2, 80, { message: 'Họ tên phải từ 2 đến 80 ký tự.' }) displayName: string;
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(20) phone: string | null = null;
+}
+
+class SetVipBody {
+  @IsBoolean() vip: boolean;
 }
 
 @Controller('auth')
@@ -99,6 +103,12 @@ export class UsersController {
   @Get()
   list() {
     return this.team.listUsers();
+  }
+
+  /** Upgrade a teacher to VIP (AI features) or back to a regular account. */
+  @Put(':id/vip')
+  setVip(@Param('id', ParseUUIDPipe) id: string, @Body() body: SetVipBody) {
+    return this.team.setVip(id, body.vip);
   }
 
   @Delete(':id') @HttpCode(204)

@@ -130,6 +130,7 @@ export class ProblemSetService {
     const details = known ?? (await this.problems.getDetails(sets.flatMap((s) => s.snapshot.items.map((i) => i.problemId)), null));
     return sets.map((set) => {
       const s = set.snapshot;
+      const canEdit = set.canEdit(actor);
       return {
         id: set.id,
         title: s.title,
@@ -140,15 +141,17 @@ export class ProblemSetService {
         isPublic: s.isPublic,
         copiedFrom: s.copiedFrom,
         totalPoints: set.totalPoints,
-        canEdit: set.canEdit(actor),
+        canEdit,
         createdAt: s.createdAt.toISOString(),
         items: s.items.map((item, index) => {
           const p = details.get(item.problemId);
+          // Sets made before unsharing was guarded may still hold a private problem: others only learn that.
+          const hidden = !!p && !canEdit && !p.sharing.isPublic;
           return {
             problemId: item.problemId,
-            problemCode: p?.code ?? '?',
-            problemTitle: p?.title ?? '(bài đã bị xóa)',
-            difficulty: p?.difficulty ?? 'MEDIUM',
+            problemCode: p && !hidden ? p.code : '?',
+            problemTitle: !p ? '(bài đã bị xóa)' : hidden ? '(bài chưa công khai)' : p.title,
+            difficulty: p && !hidden ? p.difficulty : 'MEDIUM',
             points: item.points,
             order: index + 1,
           };

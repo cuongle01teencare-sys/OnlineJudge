@@ -186,5 +186,7 @@ export function toUserDto(user: User): UserDto {
     role: user.role,
     phone: user.phone?.value ?? null,
     createdAt: user.createdAt.toISOString(),
+    vip: user.vip,
+    canUseAi: user.canUseAi,
   };
 }

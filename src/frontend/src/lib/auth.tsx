@@ -13,6 +13,8 @@ interface AuthContextValue {
   logout: () => void;
   isStaff: boolean;
   isAdmin: boolean;
+  /** AI features: administrators and VIP teachers only. */
+  canUseAi: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -87,6 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout,
       isStaff: isStaffRole(user?.role),
       isAdmin: user?.role === 'ADMIN',
+      canUseAi: !!user?.canUseAi,
     }),
     [user, loading, login, signIn, logout],
   );

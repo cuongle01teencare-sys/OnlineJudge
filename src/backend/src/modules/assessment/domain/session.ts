@@ -109,7 +109,28 @@ export interface SessionData {
   settings: SessionSettings;
   createdBy: { id: string; name: string };
   problems: SessionProblem[];
+  /**
+   * Keys of problems removed from the session (by syncing with its set). Their submissions still carry the key,
+   * so a key is never given to another problem.
+   */
+  retiredKeys: string[];
   createdAt: Date;
+}
+
+/** One problem of the source set, in set order, as it is in the bank now. */
+export interface SetItemSnapshot {
+  content: FrozenContent;
+  points: number;
+}
+
+/** What syncing a session with its source set changes (a preview, or what was applied). */
+export interface SessionSyncPlan {
+  added: { code: string; title: string; points: number }[];
+  removed: { key: string; code: string; title: string }[];
+  pointsChanged: { key: string; title: string; from: number; to: number }[];
+  /** Statement, limits or tests differ from the bank: these problems need a rejudge. */
+  contentChanged: { key: string; title: string }[];
+  reordered: boolean;
 }
 
 /**
@@ -120,7 +141,7 @@ export interface SessionData {
 export const assignmentKeyOf = (source: { kind: 'PROBLEM' | 'SET'; id: string }, classId: string | null): string =>
   `${source.kind}:${source.id}:${classId ?? 'PUBLIC'}`;
 
-export type NewSession = Omit<SessionData, 'problems' | 'createdAt'> & { problems: Omit<SessionProblem, 'key'>[] };
+export type NewSession = Omit<SessionData, 'problems' | 'retiredKeys' | 'createdAt'> & { problems: Omit<SessionProblem, 'key'>[] };
 
 /**
  * Session ("phiên"): an instance of a blueprint given to one class or to everyone.
@@ -141,6 +162,7 @@ export class Session extends AggregateRoot {
       ...input,
       title,
       problems: input.problems.map((p, i) => ({ ...p, key: keyFor(i) })),
+      retiredKeys: [],
       createdAt: new Date(),
     });
   }
@@ -175,9 +197,14 @@ export class Session extends AggregateRoot {
   }
 
   problem(key: string): SessionProblem {
-    const problem = this.state.problems.find((p) => p.key === key.toUpperCase());
+    const problem = this.findProblem(key);
     if (!problem) throw DomainError.notFound('assessment.problem_not_in_session', 'Không tìm thấy bài trong phiên.');
     return problem;
+  }
+
+  /** undefined for a key the session never had or no longer has (removed by a sync). */
+  findProblem(key: string): SessionProblem | undefined {
+    return this.state.problems.find((p) => p.key === key.toUpperCase());
   }
 
   revise(title: string, description: string, window: TimeWindow, settings: SessionSettings): void {
@@ -201,7 +228,70 @@ export class Session extends AggregateRoot {
     });
     return changed;
   }
+
+  /**
+   * What `syncWith(items)` would change. Problems are matched by their bank problem; `items` is the set in order.
+   */
+  planSync(items: SetItemSnapshot[]): SessionSyncPlan {
+    return this.sync(items).plan;
+  }
+
+  /**
+   * Makes the session match its source set: problems added or removed, set order, points per problem, and the
+   * current bank content of every problem. Kept problems keep their key (submissions refer to it); new problems
+   * get keys never used in this session. Returns what changed; `contentChanged` problems need a rejudge.
+   */
+  syncWith(items: SetItemSnapshot[]): SessionSyncPlan {
+    const { plan, problems, retired } = this.sync(items);
+    this.state.problems = problems;
+    this.state.retiredKeys = [...this.state.retiredKeys, ...retired];
+    return plan;
+  }
+
+  private sync(items: SetItemSnapshot[]) {
+    assert(items.length > 0, 'assessment.empty', 'Phiên cần có ít nhất một bài.');
+    const current = new Map(this.state.problems.map((p) => [p.sourceProblemId, p]));
+    const wanted = new Set(items.map((i) => i.content.sourceProblemId));
+    const used = new Set([...this.state.problems.map((p) => p.key), ...this.state.retiredKeys]);
+    const nextKey = () => {
+      let i = 0;
+      while (used.has(keyFor(i))) i++;
+      used.add(keyFor(i));
+      return keyFor(i);
+    };
+
+    const plan: SessionSyncPlan = { added: [], removed: [], pointsChanged: [], contentChanged: [], reordered: false };
+    const removed = this.state.problems.filter((p) => !wanted.has(p.sourceProblemId));
+    plan.removed = removed.map((p) => ({ key: p.key, code: p.code, title: p.title }));
+
+    const problems: SessionProblem[] = items.map(({ content, points }) => {
+      const old = current.get(content.sourceProblemId);
+      if (!old) {
+        plan.added.push({ code: content.code, title: content.title, points });
+        return { ...content, key: nextKey(), points };
+      }
+      if (old.points !== points) plan.pointsChanged.push({ key: old.key, title: content.title, from: old.points, to: points });
+      if (!sameContent(old, content)) plan.contentChanged.push({ key: old.key, title: content.title });
+      return { ...content, key: old.key, points };
+    });
+
+    const keptBefore = this.state.problems.filter((p) => wanted.has(p.sourceProblemId)).map((p) => p.key);
+    const keptAfter = problems.filter((p) => current.has(p.sourceProblemId)).map((p) => p.key);
+    plan.reordered = keptBefore.join() !== keptAfter.join();
+    return { plan, problems, retired: removed.map((p) => p.key) };
+  }
 }
+
+/** Whether a frozen problem still matches the bank (everything the judge or a student sees). */
+function sameContent(a: FrozenContent, b: FrozenContent): boolean {
+  const pick = (c: FrozenContent) => [c.title, c.difficulty, c.statement, c.inputFormat, c.outputFormat, c.constraints,
+    c.timeLimitMs, c.memoryLimitMb, c.testCases.map((t) => [t.input, t.expectedOutput, t.isSample, t.points])];
+  return JSON.stringify(pick(a)) === JSON.stringify(pick(b));
+}
+
+/** True when syncing would change nothing. */
+export const isEmptySync = (plan: SessionSyncPlan): boolean =>
+  !plan.added.length && !plan.removed.length && !plan.pointsChanged.length && !plan.contentChanged.length && !plan.reordered;
 
 /**
  * A participant's personal time window in a timed session ("Bắt đầu làm bài").

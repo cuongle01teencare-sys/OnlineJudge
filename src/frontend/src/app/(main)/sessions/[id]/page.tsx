@@ -9,6 +9,7 @@ import { ExamTimer, SettingsInfo, StartScreen, useServerOffset } from '@/compone
 import { Markdown } from '@/components/markdown';
 import { RejudgeTools } from '@/components/rejudge';
 import { SessionIntegrity } from '@/components/integrity';
+import { SessionSyncButton } from '@/components/session-sync';
 import { AudienceLabel, EditSessionDialog, ProgressCells, SessionStateBadge, SessionWindow } from '@/components/sessions';
 import { useToast } from '@/components/toast';
 import {
@@ -148,6 +149,7 @@ export default function SessionPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
           <h2 className="font-semibold">Các bài</h2>
           <div className="flex flex-wrap items-center gap-3">
+            {s.canManage && s.sourceSetId && <SessionSyncButton session={s} onSession={(n) => setData(n)} />}
             {hidden ? (
               <span className="text-sm text-slate-600">Kết quả hiện sau khi phiên đóng</span>
             ) : (

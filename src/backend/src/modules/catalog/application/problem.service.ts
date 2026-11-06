@@ -17,6 +17,7 @@ import type {
   UpsertTestCaseRequest,
 } from '@oj/contracts';
 import type { Actor } from '../../../shared/application/actor.js';
+import { AiAccess, aiRequiresVip } from '../../../shared/application/ai-access.js';
 import { EventPublisher } from '../../../shared/application/event-publisher.js';
 import { DomainError } from '../../../shared/domain/domain-error.js';
 import { stripExternalLinks } from '../../../shared/domain/external-links.js';
@@ -24,6 +25,7 @@ import { Problem, ResourceLimits, Sharing, Solution } from '../domain/problem.js
 import { ProblemQueries, ProblemRepository, type ProblemListFilter } from '../domain/problem.repository.js';
 import { toDetailDto, toSummaryDto, toTestCaseDto } from './problem.mapper.js';
 import { ProblemSectionWriter, TestCaseSuggester, type TestSuggestionContext } from './ports.js';
+import { UnshareChecks } from './unshare-checks.js';
 
 /** Application service for problem blueprints in teachers' banks. */
 @Injectable()
@@ -36,6 +38,8 @@ export class ProblemService {
     private readonly events: EventPublisher,
     private readonly suggester: TestCaseSuggester,
     private readonly writer: ProblemSectionWriter,
+    private readonly ai: AiAccess,
+    private readonly unshareChecks: UnshareChecks,
   ) {}
 
   // ---------- Queries ----------
@@ -90,7 +94,13 @@ export class ProblemService {
 
   async share(actor: Actor, id: string, input: SharingDto): Promise<ProblemDetailDto> {
     const problem = await this.loadEditable(actor, id);
-    problem.share(Sharing.of(input.isPublic, input.publicTests, input.publicSolution));
+    const sharing = Sharing.of(input.isPublic, input.publicTests, input.publicSolution);
+    // Making the statement private is refused while something else relies on it being public (a public set).
+    if (problem.sharing.isPublic && !sharing.isPublic) {
+      const reason = await this.unshareChecks.reasonToStayPublic(problem.id);
+      if (reason) throw DomainError.conflict('catalog.still_shared', reason);
+    }
+    problem.share(sharing);
     await this.problems.save(problem);
     return toDetailDto(problem, actor);
   }
@@ -100,12 +110,33 @@ export class ProblemService {
     return toDetailDto(copy, actor);
   }
 
-  /** Copies a viewable problem into the actor's bank (also used when copying sets). */
+  /** Copies a viewable problem into the actor's bank. */
   async copyToBank(actor: Actor, id: string): Promise<Problem> {
-    const source = await this.load(id);
-    const copy = source.copyFor(actor, await this.problems.nextSeq());
-    await this.problems.save(copy);
-    return copy;
+    return (await this.copyManyToBank(actor, [id]))[0];
+  }
+
+  /**
+   * Copies several problems (a set) into the actor's bank, in order. All or nothing: every problem is checked
+   * first, so one the actor may not see does not leave the ones before it as stray copies.
+   */
+  async copyManyToBank(actor: Actor, ids: string[]): Promise<Problem[]> {
+    const sources: Problem[] = [];
+    for (const id of ids) {
+      const source = await this.problems.findById(id);
+      if (!source || !source.canView(actor)) {
+        throw ids.length > 1
+          ? DomainError.notFound('catalog.problem_not_shared', `Đề có bài ${source?.code ?? 'đã bị xóa'} chưa công khai nên chưa lưu được đề này.`)
+          : DomainError.notFound('catalog.problem_not_found', 'Không tìm thấy bài tập.');
+      }
+      sources.push(source);
+    }
+    const copies: Problem[] = [];
+    for (const source of sources) {
+      const copy = source.copyFor(actor, await this.problems.nextSeq());
+      await this.problems.save(copy);
+      copies.push(copy);
+    }
+    return copies;
   }
 
   async addTestCase(actor: Actor, problemId: string, input: UpsertTestCaseRequest): Promise<TestCaseDto> {
@@ -131,6 +162,7 @@ export class ProblemService {
   /** AI-proposed tests for a saved problem (its solution helps); nothing is saved. */
   async suggestTestCases(actor: Actor, problemId: string, input: SuggestTestCasesRequest): Promise<TestCaseSuggestionsDto> {
     const problem = await this.loadEditable(actor, problemId);
+    await this.ai.ensureAllowed(actor);
     const { content, limits, solution } = problem;
     return this.suggestTests(
       { ...content, ...limits, solution: solution && { language: solution.language, code: solution.code, explanation: solution.explanation } },
@@ -140,7 +172,8 @@ export class ProblemService {
   }
 
   /** AI-proposed tests for a problem still being written (creating, importing); nothing is saved. */
-  async suggestDraftTests(input: SuggestDraftTestsRequest): Promise<TestCaseSuggestionsDto> {
+  async suggestDraftTests(actor: Actor, input: SuggestDraftTestsRequest): Promise<TestCaseSuggestionsDto> {
+    await this.ai.ensureAllowed(actor);
     const { timeLimitMs, memoryLimitMb, ...content } = input.problem;
     const limits = ResourceLimits.default;
     return this.suggestTests(
@@ -183,9 +216,10 @@ export class ProblemService {
 
   /**
    * AI rewrite of one text section of a problem being written (possibly not saved yet); nothing is saved.
-   * Text sections never come back with file input/output; without an API key only that rewrite is offered.
+   * Text sections never come back with file input/output; without an API key (or for a regular, non-VIP teacher
+   * account) only that rule-based rewrite is offered.
    */
-  async suggestSection(input: SuggestProblemSectionRequest): Promise<ProblemSectionSuggestionDto> {
+  async suggestSection(actor: Actor, input: SuggestProblemSectionRequest): Promise<ProblemSectionSuggestionDto> {
     const { section, problem } = input;
     const side = ioSideOf(section);
     const current = problem[section];
@@ -194,6 +228,12 @@ export class ProblemService {
       text: toStandardIo(current, side),
       notes: ['Máy chủ chưa dùng được AI nên chỉ chuyển phần đọc/ghi file sang nhập/xuất chuẩn.'],
     });
+    if (!(await this.ai.allows(actor.id))) {
+      if (hasFileIo(current, side)) {
+        return { ...ruleBased(), notes: ['Tài khoản thường không dùng được AI nên chỉ chuyển phần đọc/ghi file sang nhập/xuất chuẩn.'] };
+      }
+      throw aiRequiresVip();
+    }
     if (!this.writer.available) {
       if (hasFileIo(current, side)) return ruleBased();
       throw aiUnavailable();

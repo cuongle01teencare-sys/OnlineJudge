@@ -1,7 +1,7 @@
 'use client';
 
 import type { InvitationDto, Role, UserDto } from '@oj/contracts';
-import { MailPlus, RotateCw, Trash2, X } from 'lucide-react';
+import { Crown, MailPlus, RotateCw, Trash2, X } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Container } from '@/components/app-shell';
 import { ADMIN_ONLY, RequireRole } from '@/components/guards';
@@ -232,6 +232,7 @@ export default function UsersPage() {
   const [invitesKey, setInvitesKey] = useState(0);
   const [deleting, setDeleting] = useState<UserDto | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [vipBusyId, setVipBusyId] = useState<string | null>(null);
 
   const users = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -250,6 +251,19 @@ export default function UsersPage() {
     for (const u of data ?? []) c[u.role] = (c[u.role] ?? 0) + 1;
     return c;
   }, [data]);
+
+  const toggleVip = async (u: UserDto) => {
+    setVipBusyId(u.id);
+    try {
+      const updated = await api.setUserVip(u.id, !u.vip);
+      setData((prev) => (prev ?? []).map((x) => (x.id === u.id ? updated : x)));
+      toast.success(updated.vip ? `${u.displayName} đã là giáo viên VIP (dùng được AI)` : `${u.displayName} đã về tài khoản thường`);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setVipBusyId(null);
+    }
+  };
 
   const doDelete = async () => {
     if (!deleting) return;
@@ -271,7 +285,7 @@ export default function UsersPage() {
       <Container>
         <PageHeader
           title="Người dùng"
-          subtitle="Học sinh tự đăng ký tài khoản rồi xin vào lớp bằng mã lớp. Giáo viên được mời qua email."
+          subtitle="Học sinh tự đăng ký tài khoản rồi xin vào lớp bằng mã lớp. Giáo viên được mời qua email. Chỉ giáo viên VIP mới dùng được các tính năng AI."
           actions={
             <Button onClick={() => setInviting(true)}>
               <MailPlus className="h-4 w-4" />
@@ -339,10 +353,30 @@ export default function UsersPage() {
                         {u.phone ? <a href={`tel:${u.phone}`} className="hover:text-ink-700">{u.phone}</a> : '—'}
                       </td>
                       <td className="px-4 py-2.5">
-                        <Badge className={roleClass[u.role]}>{RoleLabels[u.role]}</Badge>
+                        <span className="flex flex-wrap items-center gap-1">
+                          <Badge className={roleClass[u.role]}>{RoleLabels[u.role]}</Badge>
+                          {u.role === 'TEACHER' && u.vip && (
+                            <Badge className="bg-amber-50 text-amber-800 ring-1 ring-amber-200">
+                              <Crown className="mr-1 h-3 w-3" />
+                              VIP
+                            </Badge>
+                          )}
+                        </span>
                       </td>
                       <td className="hidden px-4 py-2.5 text-slate-500 sm:table-cell">{formatDate(u.createdAt)}</td>
-                      <td className="px-4 py-2.5 text-right">
+                      <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                        {u.role === 'TEACHER' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleVip(u)}
+                            loading={vipBusyId === u.id}
+                            title={u.vip ? 'Chuyển về tài khoản thường (không dùng được AI)' : 'Nâng cấp VIP để dùng các tính năng AI'}
+                          >
+                            <Crown className="h-4 w-4" />
+                            {u.vip ? 'Bỏ VIP' : 'Nâng cấp VIP'}
+                          </Button>
+                        )}
                         {u.role !== 'ADMIN' && (
                           <Button
                             variant="ghost"

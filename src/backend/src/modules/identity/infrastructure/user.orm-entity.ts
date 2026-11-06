@@ -24,6 +24,10 @@ export class UserOrmEntity {
   @Column({ type: 'varchar', length: 255 })
   passwordHash: string;
 
+  /** VIP teacher: may use the AI features. */
+  @Column('boolean', { default: false })
+  vip: boolean;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 }

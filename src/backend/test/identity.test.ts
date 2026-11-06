@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DomainError } from '../src/shared/domain/domain-error.js';
-import { Email, Phone } from '../src/modules/identity/domain/user.js';
+import { DisplayName, Email, Phone, User } from '../src/modules/identity/domain/user.js';
 import { MAX_ATTEMPTS, Verification } from '../src/modules/identity/domain/verification.js';
 
 const email = Email.of('An@Truong.edu.vn');
@@ -37,4 +37,20 @@ test('verification expires', () => {
   assert.throws(() => v.attempt(true, new Date(t0.getTime() + 11 * 60_000)), /hết hạn/);
   const invite = Verification.issue('INVITE_TEACHER', email, {}, 'hash', t0);
   assert.ok(invite.isUsable(new Date(t0.getTime() + 6 * 24 * 3600_000)));
+});
+
+test('only VIP teachers (and the administrator) may use AI', () => {
+  const account = (address: string) => ({ email: Email.of(address), displayName: DisplayName.of('Lan'), phone: null, passwordHash: 'h' });
+  const teacher = User.acceptTeacherInvitation(account('gv@truong.edu.vn'));
+  assert.equal(teacher.vip, false, 'new teachers start on a regular account');
+  assert.equal(teacher.canUseAi, false);
+  teacher.setVip(true);
+  assert.equal(teacher.canUseAi, true);
+  teacher.setVip(false);
+  assert.equal(teacher.canUseAi, false);
+
+  const student = User.registerStudent(account('hs@truong.edu.vn'));
+  assert.throws(() => student.setVip(true), /Chỉ tài khoản giáo viên/);
+  assert.equal(student.canUseAi, false);
+  assert.equal(User.bootstrapAdmin(account('admin@truong.edu.vn')).canUseAi, true);
 });

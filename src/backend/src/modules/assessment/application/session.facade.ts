@@ -13,8 +13,8 @@ export class SessionFacade {
     return this.sessions.prepareSubmission(actor, sessionId, problemKey);
   }
 
-  /** Current test data of a session problem (for rejudging; no permission checks). */
-  judgeTarget(sessionId: string, problemKey: string): Promise<JudgeTarget> {
+  /** Current test data of a session problem (for rejudging; no permission checks); null if it was removed. */
+  judgeTarget(sessionId: string, problemKey: string): Promise<JudgeTarget | null> {
     return this.sessions.judgeTarget(sessionId, problemKey);
   }
 

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import type { IntegrityFlagDetailDto, IntegrityFlagDto, IntegrityFlagStatus } from '@oj/contracts';
 import type { Actor } from '../../../shared/application/actor.js';
+import { AiAccess } from '../../../shared/application/ai-access.js';
 import { DomainError } from '../../../shared/domain/domain-error.js';
 import { SUBMISSION_JUDGED, type SubmissionJudgedEvent } from '../../judging/judging.events.js';
 import { fingerprint, similarity } from '../domain/fingerprint.js';
@@ -26,6 +27,7 @@ export class IntegrityService {
     private readonly submissions: SubmissionSource,
     private readonly sessions: SessionAccess,
     private readonly reviewer: AiUsageReviewer,
+    private readonly ai: AiAccess,
   ) {}
 
   // ---------- Background checks ----------
@@ -51,7 +53,9 @@ export class IntegrityService {
     if (info.checkPlagiarism && (await this.flags.markChecked(submission.id, 'PLAGIARISM'))) {
       await this.checkPlagiarism(ctx, submission);
     }
-    if (info.checkAiUsage && this.reviewer.available && (await this.flags.markChecked(submission.id, 'AI_USAGE'))) {
+    // The AI review runs only for sessions of an administrator or a VIP teacher (checked now: a downgrade stops it).
+    if (info.checkAiUsage && this.reviewer.available && (await this.ai.allows(info.ownerId))
+      && (await this.flags.markChecked(submission.id, 'AI_USAGE'))) {
       const review = await this.reviewer.review({ statement: info.statement, language: submission.language, code: submission.code });
       const flag = IntegrityFlag.aiUsage(ctx, ref(submission), review);
       if (flag) await this.flags.save(flag);

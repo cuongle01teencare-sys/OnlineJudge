@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CatalogModule } from '../catalog/catalog.module.js';
+import { IdentityModule } from '../identity/identity.module.js';
 import { ImportService } from './application/import.service.js';
 import { DocumentReader, ProblemCatalogGateway, SmartExamReader } from './application/ports.js';
 import { ClaudeExamReader } from './infrastructure/claude-exam-reader.js';
@@ -8,7 +9,7 @@ import { MammothPdfDocumentReader } from './infrastructure/document-reader.js';
 import { ImportsController } from './presentation/imports.controller.js';
 
 @Module({
-  imports: [CatalogModule],
+  imports: [CatalogModule, IdentityModule],
   controllers: [ImportsController],
   providers: [
     ImportService,

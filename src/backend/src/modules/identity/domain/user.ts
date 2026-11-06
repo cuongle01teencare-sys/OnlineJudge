@@ -45,6 +45,8 @@ export interface UserProps {
   phone: Phone | null;
   role: Role;
   passwordHash: string;
+  /** VIP teacher account: unlocks the AI features. */
+  vip: boolean;
   createdAt: Date;
 }
 
@@ -89,12 +91,26 @@ export class User extends AggregateRoot {
       phone: account.phone,
       role,
       passwordHash: account.passwordHash,
+      vip: false,
       createdAt: new Date(),
     });
   }
 
   changePassword(passwordHash: string): void {
     this.props.passwordHash = passwordHash;
+  }
+
+  /** Upgrades a teacher to VIP (AI features) or back to a regular account. */
+  setVip(vip: boolean): void {
+    if (this.props.role !== 'TEACHER') {
+      throw DomainError.validation('identity.vip_teachers_only', 'Chỉ tài khoản giáo viên mới nâng cấp VIP được.');
+    }
+    this.props.vip = vip;
+  }
+
+  /** AI features are for administrators and VIP teachers only. */
+  get canUseAi(): boolean {
+    return this.props.role === 'ADMIN' || (this.props.role === 'TEACHER' && this.props.vip);
   }
 
   ensureDeletable(): void {
@@ -108,5 +124,6 @@ export class User extends AggregateRoot {
   get phone() { return this.props.phone; }
   get role() { return this.props.role; }
   get passwordHash() { return this.props.passwordHash; }
+  get vip() { return this.props.vip; }
   get createdAt() { return this.props.createdAt; }
 }

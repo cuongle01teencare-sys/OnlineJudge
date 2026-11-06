@@ -27,8 +27,8 @@ export function RejudgeTools({ session, onSession }: { session: SessionDto; onSe
         const s = await api.refreshSession(session.id);
         onSession(s);
         const r = await api.rejudgeSession(session.id, {});
-        toast.success(`Đã cập nhật đề và đưa ${r.queued} bài nộp vào hàng chờ chấm lại`);
-        setNote(`Đã cập nhật đề từ ngân hàng. ${r.queued} bài nộp đang được chấm lại.`);
+        toast.success(`Đã cập nhật nội dung bài và đưa ${r.queued} bài nộp vào hàng chờ chấm lại`);
+        setNote(`Đã cập nhật nội dung bài từ ngân hàng. ${r.queued} bài nộp đang được chấm lại.`);
       } else {
         const r = await api.rejudgeSession(session.id, pending.key ? { problemKey: pending.key } : {});
         toast.success(`Đã đưa ${r.queued} bài nộp vào hàng chờ chấm lại`);
@@ -70,7 +70,7 @@ export function RejudgeTools({ session, onSession }: { session: SessionDto; onSe
         </span>
         <Button variant="secondary" size="sm" onClick={() => setPending({ kind: 'refresh' })}>
           <RefreshCcw className="h-4 w-4" />
-          Cập nhật đề từ ngân hàng & chấm lại
+          Cập nhật nội dung bài từ ngân hàng & chấm lại
         </Button>
       </div>
       {note && (
@@ -84,7 +84,7 @@ export function RejudgeTools({ session, onSession }: { session: SessionDto; onSe
         loading={busy}
         title={
           pending?.kind === 'refresh'
-            ? 'Cập nhật đề từ ngân hàng và chấm lại?'
+            ? 'Cập nhật nội dung bài từ ngân hàng và chấm lại?'
             : target
               ? `Chấm lại bài ${target.key}?`
               : 'Chấm lại mọi bài nộp?'
@@ -93,8 +93,9 @@ export function RejudgeTools({ session, onSession }: { session: SessionDto; onSe
         message={
           pending?.kind === 'refresh' ? (
             <>
-              Đề, giới hạn và bộ test của các bài trong phiên sẽ được lấy lại từ ngân hàng (giữ nguyên thứ tự và điểm). Sau
-              đó mọi bài nộp được chấm lại, nên điểm của học sinh có thể thay đổi theo test mới.
+              Đề, giới hạn và bộ test của các bài đang có trong phiên sẽ được lấy lại từ ngân hàng (giữ nguyên danh sách bài,
+              thứ tự và điểm). Sau đó mọi bài nộp được chấm lại, nên điểm của học sinh có thể thay đổi theo test mới.
+              {session.sourceSetId && ' Muốn lấy cả bài thêm/bớt và điểm mới của đề, hãy dùng "Đồng bộ với đề gốc".'}
             </>
           ) : (
             <>

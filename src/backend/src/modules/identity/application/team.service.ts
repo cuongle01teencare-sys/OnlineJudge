@@ -39,6 +39,15 @@ export class TeamService {
     return (await this.users.findAll()).map(toUserDto);
   }
 
+  /** Upgrades a teacher to VIP (AI features) or back to a regular account. */
+  async setVip(id: string, vip: boolean): Promise<UserDto> {
+    const user = await this.users.findById(id);
+    if (!user) throw DomainError.notFound('identity.user_not_found', 'Không tìm thấy người dùng.');
+    user.setVip(vip);
+    await this.users.save(user);
+    return toUserDto(user);
+  }
+
   async deleteUser(id: string): Promise<void> {
     const user = await this.users.findById(id);
     if (!user) throw DomainError.notFound('identity.user_not_found', 'Không tìm thấy người dùng.');

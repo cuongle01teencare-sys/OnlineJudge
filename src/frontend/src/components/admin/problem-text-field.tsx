@@ -5,14 +5,16 @@ import {
   fileIoMessage,
   hasFileIo,
   ioSideOf,
+  toStandardIo,
   ProblemTextFieldLabels,
   type ProblemDraftContent,
   type ProblemTextField,
 } from '@oj/contracts';
-import { AlertTriangle, RotateCcw, Wand2 } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, RotateCcw, Wand2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useCanUseAi, VipOnly } from '../ai-access';
 import { MarkdownField } from '../form-fields';
 import { useToast } from '../toast';
 import { Spinner } from '../ui';
@@ -125,13 +127,18 @@ export function SuggestionSwitch({
   suggestion,
   text = 'Dùng gợi ý',
   className,
+  showLocked = false,
 }: {
   label: string;
   suggestion: SectionSuggestion;
   text?: string;
   className?: string;
+  /** For regular (non-VIP) accounts: show a "VIP only" hint instead of nothing. */
+  showLocked?: boolean;
 }) {
+  const canUseAi = useCanUseAi();
   const { on, loading, toggle, regenerate } = suggestion;
+  if (!canUseAi) return showLocked ? <VipOnly label="Gợi ý AI" className={className} /> : null;
   return (
     <span className={cn('flex items-center gap-3', className)}>
       <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
@@ -204,7 +211,9 @@ export function ProblemTextField({
   suggestion: SectionSuggestion;
 }) {
   const label = ProblemTextFieldLabels[field];
-  const fileIo = hasFileIo(value, ioSideOf(field));
+  const side = ioSideOf(field);
+  const fileIo = hasFileIo(value, side);
+  const canUseAi = useCanUseAi();
   return (
     <MarkdownField
       label={label}
@@ -219,9 +228,19 @@ export function ProblemTextField({
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>
                 Mục này còn yêu cầu đọc/ghi file nên chưa lưu được: hệ thống chấm đưa dữ liệu qua bàn phím (đầu vào chuẩn) và
-                chấm theo những gì in ra màn hình. Hãy sửa lại, hoặc bật &quot;Dùng gợi ý&quot;.
+                chấm theo những gì in ra màn hình. Hãy sửa lại, hoặc {canUseAi ? <>bật &quot;Dùng gợi ý&quot;</> : 'bấm "Chuyển sang nhập/xuất chuẩn"'}.
               </span>
             </p>
+          )}
+          {fileIo && !canUseAi && (
+            <button
+              type="button"
+              onClick={() => onChange(toStandardIo(value, side))}
+              className="mt-1 flex items-center gap-1 text-xs font-medium text-ink-600 hover:underline"
+            >
+              <ArrowRightLeft className="h-3 w-3" />
+              Chuyển sang nhập/xuất chuẩn
+            </button>
           )}
           <SuggestionNotes suggestion={suggestion} />
         </>

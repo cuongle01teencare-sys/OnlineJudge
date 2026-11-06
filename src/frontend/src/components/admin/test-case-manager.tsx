@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Pencil, Plus, Sparkles, Trash2 } from 'lucid
 import { useRef, useState } from 'react';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useCanUseAi, VipOnly } from '../ai-access';
 import { IoTextarea } from '../form-fields';
 import { useToast } from '../toast';
 import { Badge, Button, Card, ConfirmDialog, EmptyState, inputClass, Modal } from '../ui';
@@ -32,6 +33,7 @@ export function TestCaseManager({
   const [deleting, setDeleting] = useState<TestCaseDto | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const canUseAi = useCanUseAi();
   const [suggesting, setSuggesting] = useState(false);
   // The list as it grows while the AI dialog adds tests one by one.
   const added = useRef(testCases);
@@ -101,10 +103,14 @@ export function TestCaseManager({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="secondary" onClick={() => setSuggesting(true)}>
-            <Sparkles className="h-4 w-4" />
-            Gợi ý bằng AI
-          </Button>
+          {canUseAi ? (
+            <Button size="sm" variant="secondary" onClick={() => setSuggesting(true)}>
+              <Sparkles className="h-4 w-4" />
+              Gợi ý bằng AI
+            </Button>
+          ) : (
+            <VipOnly label="Gợi ý test bằng AI" className="self-center" />
+          )}
           <Button size="sm" onClick={() => setEditing({ id: null, value: { ...emptyTest } })}>
             <Plus className="h-4 w-4" />
             Thêm test
@@ -115,16 +121,18 @@ export function TestCaseManager({
       {sorted.length > 0 && sorted.length < FEW_TESTS && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-ink-50/60 px-5 py-2 text-sm text-slate-700">
           <span>Bộ test còn ít ({sorted.length} test), học sinh có thể qua bài dù code còn sai ở trường hợp biên.</span>
-          <Button size="sm" variant="ghost" onClick={() => setSuggesting(true)}>
-            <Sparkles className="h-4 w-4" />
-            Để AI gợi ý thêm
-          </Button>
+          {canUseAi && (
+            <Button size="sm" variant="ghost" onClick={() => setSuggesting(true)}>
+              <Sparkles className="h-4 w-4" />
+              Để AI gợi ý thêm
+            </Button>
+          )}
         </div>
       )}
 
       {sorted.length === 0 ? (
         <EmptyState title="Chưa có test nào">
-          Thêm ít nhất một test để có thể chấm bài, hoặc bấm <b>Gợi ý bằng AI</b> để AI đề xuất từ đề bài.
+          Thêm ít nhất một test để có thể chấm bài{canUseAi && <>, hoặc bấm <b>Gợi ý bằng AI</b> để AI đề xuất từ đề bài</>}.
         </EmptyState>
       ) : (
         <ul className="divide-y divide-slate-100">

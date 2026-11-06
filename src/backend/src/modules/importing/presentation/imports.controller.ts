@@ -56,17 +56,17 @@ export class ImportsController {
 
   @Post('parse') @HttpCode(200)
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
-  parse(@UploadedFile() file?: Express.Multer.File) {
+  parse(@CurrentActor() actor: Actor, @UploadedFile() file?: Express.Multer.File) {
     if (!file) throw DomainError.validation('import.no_file', 'Vui lòng chọn tệp .docx hoặc .pdf.');
     // Multer decodes the multipart filename as latin1; restore UTF-8 (Vietnamese names).
     const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-    return this.imports.parse({ originalName, mimeType: file.mimetype, buffer: file.buffer });
+    return this.imports.parse(actor, { originalName, mimeType: file.mimetype, buffer: file.buffer });
   }
 
   /** Same as `parse`, for exam text pasted by the teacher. */
   @Post('parse-text') @HttpCode(200)
-  parseText(@Body() body: ParseTextBody) {
-    return this.imports.parseText(body.text);
+  parseText(@CurrentActor() actor: Actor, @Body() body: ParseTextBody) {
+    return this.imports.parseText(actor, body.text);
   }
 
   @Post('confirm')

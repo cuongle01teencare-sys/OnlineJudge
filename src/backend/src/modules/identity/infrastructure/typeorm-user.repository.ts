@@ -47,6 +47,7 @@ export class TypeOrmUserRepository extends UserRepository {
       phone: user.phone?.value ?? null,
       role: user.role,
       passwordHash: user.passwordHash,
+      vip: user.vip,
       createdAt: user.createdAt,
     });
   }
@@ -63,6 +64,7 @@ function toUser(row: UserOrmEntity): User {
     phone: row.phone ? Phone.of(row.phone) : null,
     role: row.role as Role,
     passwordHash: row.passwordHash,
+    vip: row.vip ?? false,
     createdAt: row.createdAt,
   });
 }

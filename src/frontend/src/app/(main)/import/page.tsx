@@ -29,6 +29,7 @@ import {
   useSectionSuggestions,
 } from '@/components/admin/problem-text-field';
 import { TestListEditor } from '@/components/admin/test-list-editor';
+import { useCanUseAi } from '@/components/ai-access';
 import { RequireRole, STAFF } from '@/components/guards';
 import { useToast } from '@/components/toast';
 import { Badge, Button, Card, Field, InlineAlert, inputClass, LinkButton, PageHeader, Spinner } from '@/components/ui';
@@ -219,6 +220,7 @@ function DraftCard({
           text="Dùng gợi ý cho cả bài"
           suggestion={suggestions.all}
           className="ml-auto"
+          showLocked
         />
       </div>
 
@@ -302,6 +304,7 @@ function DraftCard({
 }
 
 export default function ImportPage() {
+  const canUseAi = useCanUseAi();
   const toast = useToast();
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -466,8 +469,8 @@ export default function ImportPage() {
             </div>
             {parsed.parser === 'BASIC' && (
               <p className="text-sm text-slate-600">
-                Đề được đọc theo mẫu có sẵn. File PDF lộn xộn hoặc bản scan sẽ đọc tốt hơn bằng AI, khi máy chủ có khóa API của
-                Claude.
+                Đề được đọc theo mẫu có sẵn. File PDF lộn xộn hoặc bản scan sẽ đọc tốt hơn bằng AI
+                {canUseAi ? ', khi máy chủ có khóa API của Claude.' : ' (chỉ dành cho tài khoản giáo viên VIP).'}
               </p>
             )}
             <InlineAlert kind="info">

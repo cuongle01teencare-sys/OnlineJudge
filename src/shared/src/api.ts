@@ -16,6 +16,14 @@ export interface UserDto {
   role: Role;
   phone: string | null;
   createdAt: string;
+  /** VIP teacher: may use the AI features. Only meaningful for teachers. */
+  vip: boolean;
+  /** Whether this account may use the AI features (administrators and VIP teachers). */
+  canUseAi: boolean;
+}
+
+export interface SetVipRequest {
+  vip: boolean;
 }
 
 export interface AuthResponse {
@@ -557,6 +565,25 @@ export interface UpdateSessionRequest {
 /** Rejudge every submission of a session, or only of one problem. */
 export interface RejudgeRequest {
   problemKey?: string;
+}
+
+/** What "Đồng bộ với đề gốc" would change in a session given from a set (or what it changed). */
+export interface SessionSyncPreviewDto {
+  setId: string;
+  setTitle: string;
+  added: { code: string; title: string; points: number }[];
+  /** `studentsWithSubmissions`: their submissions stay in their history but no longer count. */
+  removed: { key: string; code: string; title: string; studentsWithSubmissions: number }[];
+  pointsChanged: { key: string; title: string; from: number; to: number }[];
+  /** Statement, limits or tests changed in the bank: these problems are rejudged. */
+  contentChanged: { key: string; title: string }[];
+  reordered: boolean;
+  hasChanges: boolean;
+}
+
+export interface SessionSyncResultDto {
+  session: SessionDto;
+  changes: SessionSyncPreviewDto;
 }
 
 export interface RejudgeResponse {

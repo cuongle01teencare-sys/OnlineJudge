@@ -5,6 +5,7 @@ import { DomainError } from '../../../shared/domain/domain-error.js';
 import { ProblemRepository } from '../domain/problem.repository.js';
 import { toDetailDto } from './problem.mapper.js';
 import { ProblemService } from './problem.service.js';
+import { UnshareChecks, type UnshareCheck } from './unshare-checks.js';
 
 /** Everything a session needs to freeze a problem: full content including hidden tests. */
 export interface ProblemSnapshot {
@@ -31,6 +32,7 @@ export class CatalogFacade {
   constructor(
     private readonly problems: ProblemRepository,
     private readonly service: ProblemService,
+    private readonly unshareChecks: UnshareChecks,
   ) {}
 
   /** Creates a new problem in the actor's bank with its initial test cases; returns the new id. */
@@ -81,8 +83,12 @@ export class CatalogFacade {
 
   /** Copies problems into the actor's bank (used when copying a public set). Returns old id -> new id. */
   async copyIntoBank(actor: Actor, ids: string[]): Promise<Map<string, string>> {
-    const result = new Map<string, string>();
-    for (const id of ids) result.set(id, (await this.service.copyToBank(actor, id)).id);
-    return result;
+    const copies = await this.service.copyManyToBank(actor, ids);
+    return new Map(ids.map((id, i) => [id, copies[i].id]));
+  }
+
+  /** Lets another context refuse making a public problem private (e.g. while a public set uses it). */
+  registerUnshareCheck(check: UnshareCheck): void {
+    this.unshareChecks.register(check);
   }
 }

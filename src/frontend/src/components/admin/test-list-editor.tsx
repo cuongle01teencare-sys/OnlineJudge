@@ -4,6 +4,7 @@ import type { SuggestTestCasesRequest, TestCaseSuggestionsDto, UpsertTestCaseReq
 import { ChevronDown, ChevronRight, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useCanUseAi, VipOnly } from '../ai-access';
 import { IoTextarea } from '../form-fields';
 import { Button, Card, EmptyState, inputClass } from '../ui';
 import { FEW_TESTS, SuggestTestsDialog } from './test-suggestions';
@@ -29,6 +30,7 @@ export function TestListEditor({
   className?: string;
 }) {
   const [open, setOpen] = useState<Set<number>>(new Set());
+  const canUseAi = useCanUseAi();
   const [suggesting, setSuggesting] = useState(false);
   // The list as it grows while the AI dialog adds tests one by one.
   const latest = useRef(tests);
@@ -68,10 +70,14 @@ export function TestListEditor({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="secondary" onClick={() => setSuggesting(true)}>
-            <Sparkles className="h-4 w-4" />
-            Gợi ý bằng AI
-          </Button>
+          {canUseAi ? (
+            <Button size="sm" variant="secondary" onClick={() => setSuggesting(true)}>
+              <Sparkles className="h-4 w-4" />
+              Gợi ý bằng AI
+            </Button>
+          ) : (
+            <VipOnly label="Gợi ý test bằng AI" className="self-center" />
+          )}
           <Button size="sm" onClick={add}>
             <Plus className="h-4 w-4" />
             Thêm test
@@ -82,16 +88,18 @@ export function TestListEditor({
       {tests.length > 0 && tests.length < FEW_TESTS && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-ink-50/60 px-5 py-2 text-sm text-slate-700">
           <span>Bộ test còn ít ({tests.length} test), học sinh có thể qua bài dù code còn sai ở trường hợp biên.</span>
-          <Button size="sm" variant="ghost" onClick={() => setSuggesting(true)}>
-            <Sparkles className="h-4 w-4" />
-            Để AI gợi ý thêm
-          </Button>
+          {canUseAi && (
+            <Button size="sm" variant="ghost" onClick={() => setSuggesting(true)}>
+              <Sparkles className="h-4 w-4" />
+              Để AI gợi ý thêm
+            </Button>
+          )}
         </div>
       )}
 
       {tests.length === 0 ? (
         <EmptyState title="Chưa có test nào">
-          Bấm <b>Thêm test</b> để tự nhập, hoặc <b>Gợi ý bằng AI</b> để AI đề xuất từ đề bài. Có thể thêm sau khi lưu.
+          Bấm <b>Thêm test</b> để tự nhập{canUseAi && <>, hoặc <b>Gợi ý bằng AI</b> để AI đề xuất từ đề bài</>}. Có thể thêm sau khi lưu.
         </EmptyState>
       ) : (
         <ul className="divide-y divide-slate-100">

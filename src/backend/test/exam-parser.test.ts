@@ -95,10 +95,13 @@ test('Word equations become plain text instead of disappearing', () => {
   assert.deepEqual(texts, ['n ≤ ', '10^5', '(a+b)/2', 'a_{i+1}', 'sqrt(n)', '(a,b)']);
 });
 
+const lan = { id: 't', role: 'TEACHER' as const, name: 'Lan' };
+
 test('pasted exam text is split into problems like an uploaded file', async () => {
   const { ImportService } = await import('../src/modules/importing/application/import.service.js');
-  const service = new ImportService({} as never, { available: false } as never, {} as never);
+  const service = new ImportService({} as never, { available: false } as never, {} as never, { allows: async () => true } as never);
   const parsed = await service.parseText(
+    lan,
     'Bài 1. TỔNG HAI SỐ\r\nCho hai số nguyên a và b.\r\n\r\nDữ liệu vào: Một dòng chứa a, b.\nKết quả: In ra a + b.\nVí dụ\nInput\n1 2\nOutput\n3\n' +
       'Bài 2. HIỆU\nTính a - b.\nDữ liệu vào: Hai số a, b.\nKết quả: In ra a - b.',
   );
@@ -106,5 +109,5 @@ test('pasted exam text is split into problems like an uploaded file', async () =
   assert.equal(parsed.parser, 'BASIC');
   assert.deepEqual(parsed.drafts.map((d) => d.title), ['TỔNG HAI SỐ', 'HIỆU']);
   assert.deepEqual(parsed.drafts[0].tests, [{ input: '1 2\n', expectedOutput: '3\n', isSample: true, points: 10 }]);
-  await assert.rejects(service.parseText('  \n '), /Hãy dán nội dung đề/);
+  await assert.rejects(service.parseText(lan, '  \n '), /Hãy dán nội dung đề/);
 });

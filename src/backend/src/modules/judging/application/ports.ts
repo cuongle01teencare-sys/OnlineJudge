@@ -21,8 +21,8 @@ export abstract class SessionGateway {
   /** Throws when the actor may not submit to this session problem right now. */
   abstract prepareSubmission(actor: Actor, sessionId: string, problemKey: string): Promise<SubmissionTarget>;
   abstract canReview(actor: Actor, sessionId: string): Promise<boolean>;
-  /** Current test data of a session problem, for rejudging. */
-  abstract judgeTarget(sessionId: string, problemKey: string): Promise<SubmissionTarget>;
+  /** Current test data of a session problem, for rejudging; null when the session no longer has that problem. */
+  abstract judgeTarget(sessionId: string, problemKey: string): Promise<SubmissionTarget | null>;
   abstract visibility(actor: Actor, sessionIds: string[]): Promise<Map<string, ResultVisibility>>;
 }
 

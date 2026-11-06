@@ -49,6 +49,8 @@ export class SessionOrmEntity {
   @Column({ type: 'varchar', length: 80 }) createdByName: string;
   /** Frozen problems without test data (kept small for listings). */
   @Column('jsonb') problems: StoredSessionProblem[];
+  /** Keys of problems removed by a sync with the source set; never reused. */
+  @Column('jsonb', { default: [] }) retiredKeys: string[];
   @Column('timestamptz') createdAt: Date;
 }
 

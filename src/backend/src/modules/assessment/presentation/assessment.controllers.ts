@@ -185,6 +185,18 @@ export class SessionsController {
     return this.sessions.start(actor, id);
   }
 
+  /** What syncing with the source set would change; nothing is saved. */
+  @Get(':id/sync') @Roles('ADMIN', 'TEACHER')
+  previewSync(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.sessions.previewSync(actor, id);
+  }
+
+  /** Makes the session match its source set; the caller then rejudges `changes.contentChanged`. */
+  @Post(':id/sync') @Roles('ADMIN', 'TEACHER') @HttpCode(200)
+  sync(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
+    return this.sessions.sync(actor, id);
+  }
+
   @Post(':id/refresh') @Roles('ADMIN', 'TEACHER') @HttpCode(200)
   refresh(@CurrentActor() actor: Actor, @Param('id', ParseUUIDPipe) id: string) {
     return this.sessions.refresh(actor, id);

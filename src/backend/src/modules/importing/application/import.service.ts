@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { fileIoFields, fileIoMessage, isAboutFileIo, type ImportProblemsResponse, type ParsedExamDto, type ProblemDraftDto } from '@oj/contracts';
 import type { Actor } from '../../../shared/application/actor.js';
+import { AiAccess } from '../../../shared/application/ai-access.js';
 import { assert } from '../../../shared/domain/domain-error.js';
 import { documentText, type ExamDocument } from '../domain/exam-document.js';
 import { ExamParser } from '../domain/exam-parser.js';
@@ -18,33 +19,36 @@ export class ImportService {
     private readonly reader: DocumentReader,
     private readonly smartReader: SmartExamReader,
     private readonly catalog: ProblemCatalogGateway,
+    private readonly ai: AiAccess,
   ) {}
 
   /**
    * Step 1: read + split into drafts. Stateless; nothing is persisted until the teacher confirms.
-   * The AI reader is tried first when available; the rule-based parser is the fallback.
+   * The AI reader is tried first when available and the account may use AI (administrators and VIP teachers);
+   * the rule-based parser is the fallback.
    */
-  async parse(file: UploadedFile): Promise<ParsedExamDto> {
+  async parse(actor: Actor, file: UploadedFile): Promise<ParsedExamDto> {
     // The text layer may be empty (scanned PDF); that only matters if the AI reader is not used.
     const doc: ExamDocument | null = await this.reader.read(file).catch(() => null);
-    return this.extract(file, doc);
+    return this.extract(actor, file, doc);
   }
 
   /** Step 1 for text pasted by the teacher instead of a file: same reading, same drafts. */
-  async parseText(text: string): Promise<ParsedExamDto> {
+  async parseText(actor: Actor, text: string): Promise<ParsedExamDto> {
     const value = text.replace(/\r\n?/g, '\n').trim();
     assert(value, 'import.empty_text', 'Hãy dán nội dung đề vào ô trước.');
     const doc: ExamDocument = {
       fileName: PASTED,
       blocks: value.split('\n').filter((line) => line.trim()).map((line) => ({ kind: 'paragraph', text: line })),
     };
-    return this.extract({ originalName: PASTED, mimeType: 'text/plain', buffer: Buffer.from(value) }, doc);
+    return this.extract(actor, { originalName: PASTED, mimeType: 'text/plain', buffer: Buffer.from(value) }, doc);
   }
 
-  private async extract(file: UploadedFile, doc: ExamDocument | null): Promise<ParsedExamDto> {
+  private async extract(actor: Actor, file: UploadedFile, doc: ExamDocument | null): Promise<ParsedExamDto> {
     const rawText = doc ? documentText(doc) : '';
+    const aiAllowed = await this.ai.allows(actor.id);
 
-    if (this.smartReader.available) {
+    if (aiAllowed && this.smartReader.available) {
       try {
         const drafts = await this.smartReader.read(file, doc);
         return { fileName: file.originalName, parser: 'AI', drafts: drafts.map(cleanDraft), rawText };
@@ -54,7 +58,8 @@ export class ImportService {
     }
 
     assert(doc && rawText.trim().length > 0, 'import.empty_document',
-      'Không đọc được chữ trong tài liệu (có thể là PDF dạng ảnh scan). Đọc đề bằng AI sẽ xử lý được loại tệp này.');
+      'Không đọc được chữ trong tài liệu (có thể là PDF dạng ảnh scan). '
+        + (aiAllowed ? 'Đọc đề bằng AI sẽ xử lý được loại tệp này.' : 'Tài khoản giáo viên VIP có thể đọc loại tệp này bằng AI.'));
     return { fileName: file.originalName, parser: 'BASIC', drafts: this.parser.parse(doc).map(cleanDraft), rawText };
   }
 

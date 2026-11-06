@@ -132,6 +132,7 @@ export function ProblemForm({
             text="Dùng gợi ý cho cả bài"
             suggestion={suggestions.all}
             className="text-sm"
+            showLocked
           />
         </div>
         {(

@@ -134,6 +134,7 @@ export class TypeOrmSessionRepository extends SessionRepository {
         createdById: s.createdBy.id,
         createdByName: s.createdBy.name,
         problems: s.problems.map(({ testCases: _, ...p }) => p),
+        retiredKeys: s.retiredKeys,
         createdAt: s.createdAt,
       });
       // Tests are only written when present (aggregate loaded with tests, e.g. after create or refresh).
@@ -166,6 +167,7 @@ function toSession(row: SessionOrmEntity, tests: Record<string, Session['snapsho
     settings: row.settings?.feedback ? SessionSettings.of(row.settings) : SessionSettings.defaults,
     createdBy: { id: row.createdById, name: row.createdByName },
     problems: row.problems.map((p) => ({ ...p, testCases: tests[p.key] ?? [] })),
+    retiredKeys: row.retiredKeys ?? [],
     createdAt: row.createdAt,
   });
 }
